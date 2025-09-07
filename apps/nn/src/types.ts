@@ -98,10 +98,28 @@ export const ProblemSchema = z.object({
   title: z.string(),
   detail: z.string().optional(),
   status: z.number().int().min(400).max(599),
-  instance: z.string().optional(),
+  instance: z.string().uuid(),
 }).strict();
 
 export type Problem = z.infer<typeof ProblemSchema>;
+
+/**
+ * Create RFC 7807 Problem+JSON object with correlation UUID
+ */
+export function createProblem(
+  title: string,
+  detail: string,
+  status: number,
+  type: string = 'about:blank'
+): Problem {
+  return ProblemSchema.parse({
+    type,
+    title,
+    detail,
+    status,
+    instance: crypto.randomUUID(),
+  });
+}
 
 // Manifest Types
 export const ManifestEntrySchema = z.object({
