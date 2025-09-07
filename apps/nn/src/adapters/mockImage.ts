@@ -94,7 +94,7 @@ export class MockImageAdapter implements ImageGenProvider {
    * Render mock images from prompt batch
    */
   async render(request: RenderRequest): Promise<RenderResult> {
-    const { rows, variants, runMode } = request;
+    const { runMode } = request;
     
     if (runMode === 'dry_run') {
       return this.estimateCost(request);

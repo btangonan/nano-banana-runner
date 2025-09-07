@@ -1,0 +1,47 @@
+# Example Reference Pack for Multi-Mode Generation
+version: "1.0"
+
+# Style references - palette/texture/mood only
+style:
+  - path: "styles/warm_kitchen.jpg"
+    weight: 1.0
+  - path: "styles/sunset_palette.jpg"
+    weight: 0.8
+
+# Props - ensure object presence
+props:
+  red_umbrella:
+    path: "refs/props/umbrella_red.png"
+    required: true
+  vintage_clock:
+    path: "refs/props/clock_antique.jpg"
+    weight: 0.5
+
+# Subject - identity preservation
+subject:
+  - name: "hero_alex"
+    face: "refs/subjects/alex_face.jpg"
+    description: "Main character with brown hair"
+  - name: "sidekick_sam"
+    face: "refs/subjects/sam_face.jpg"
+
+# Pose references
+pose:
+  - path: "refs/poses/running_silhouette.png"
+    description: "Athletic running pose"
+  - path: "refs/poses/sitting_crossed.jpg"
+
+# Environment - ambience/architecture
+environment:
+  - path: "refs/environments/cathedral_nave.jpg"
+    scene: "gothic cathedral interior"
+    preserve: ["lighting", "architecture"]
+  - path: "refs/environments/forest_path.jpg"
+    scene: "misty forest trail"
+
+# Optional metadata
+metadata:
+  author: "Design Team"
+  created: "2024-01-15T10:00:00Z"
+  description: "Reference pack for fantasy adventure scenes"
+  tags: ["fantasy", "adventure", "characters"]

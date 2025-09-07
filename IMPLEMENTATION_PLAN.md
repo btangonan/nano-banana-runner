@@ -103,16 +103,16 @@ export class GeminiImageAdapter implements ImageGenProvider {
 
 ### Implementation Details
 
-#### 1. Google Gen AI SDK Integration
+#### 1. Vertex AI SDK Integration (ADC-Only)
 ```typescript
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { VertexAI } from '@google-cloud/vertexai';
 
-// Initialize with ADC (no API key in code)
-const genAI = new GoogleGenerativeAI({
-  apiKey: process.env.GOOGLE_API_KEY!, // From ADC
-});
+// ADC-only initialization - NO API keys in code
+const project = mustEnv('GOOGLE_CLOUD_PROJECT');
+const location = mustEnv('GOOGLE_CLOUD_LOCATION');
+const vertex = new VertexAI({ project, location });
 
-const model = genAI.getGenerativeModel({
+const model = vertex.preview.getGenerativeModel({
   model: 'gemini-2.5-flash-image-preview',
   generationConfig: {
     maxOutputTokens: 4096,
@@ -179,24 +179,26 @@ async function withRetry<T>(
 }
 ```
 
-#### 4. Cost Estimation (Dry-Run)
+#### 4. Cost Estimation (Configurable Pricing)
 ```typescript
-const VERTEX_PRICING = {
-  'gemini-2.5-flash-image-preview': 0.0025, // per image
-};
-
 function estimateCost(batch: RenderBatch): CostPlan {
   const imageCount = batch.rows.length * batch.variants;
-  const cost = imageCount * VERTEX_PRICING[model];
   const concurrency = Math.min(4, Math.ceil(imageCount / 10));
   const estimatedTime = Math.ceil(imageCount / concurrency) * 3; // 3s per image avg
   
+  // Configurable pricing from environment
+  const pricePerImage = Number(env.NN_PRICE_PER_IMAGE_USD ?? NaN);
+  const estimatedCost = Number.isFinite(pricePerImage) 
+    ? imageCount * pricePerImage 
+    : undefined;
+  
   return {
     imageCount,
-    estimatedCost: cost,
+    estimatedCost: estimatedCost ?? 0,
     estimatedTime: `${estimatedTime}s`,
     concurrency,
-    warning: cost > 10 ? 'High cost operation' : undefined,
+    warning: estimatedCost && estimatedCost > 10 ? 'High cost operation' : undefined,
+    priceNote: estimatedCost ? undefined : 'Set NN_PRICE_PER_IMAGE_USD for cost estimation',
   };
 }
 ```

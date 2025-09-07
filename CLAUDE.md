@@ -3,7 +3,7 @@
 ## Quick Reference
 **Project**: Nano Banana Runner (nn) - Image analyzer → prompt remixer → Gemini generator  
 **Location**: `/Users/bradleytangonan/Desktop/my apps/gemini image analyzer/`  
-**Stack**: TypeScript, Node 20, Google Gen AI SDK, Fastify, React, Zod  
+**Stack**: TypeScript, Node 20, Vertex AI SDK, Fastify, React, Zod  
 **Status**: Core modules implemented, adapters in progress
 
 ## Active SuperClaude Commands
@@ -55,7 +55,7 @@
 - **Purpose**: Official library documentation and patterns
 - **When**: Framework questions, API usage, best practices
 - **Activation**: Import statements, framework keywords
-- **Example**: "How to use Google Gen AI SDK" → Context7 lookup
+- **Example**: "How to use Vertex AI SDK with ADC" → Context7 lookup
 
 ### Magic (21st.dev)
 - **Purpose**: UI component generation from patterns
@@ -83,7 +83,7 @@
 - CLAUDE.md playbook
 
 🔄 **In Progress**:
-- Gemini adapter with Google Gen AI SDK
+- Gemini adapter with Vertex AI SDK
 - Prompt remix engine
 - CLI with commander
 
@@ -106,13 +106,13 @@ apps/nn/
 │   │   ├── remix.ts       # 🔄 Prompt generation (next task)
 │   │   └── dedupe.ts      # ⏳ SimHash duplicate detection
 │   └── adapters/
-│       ├── geminiImage.ts # 🔄 Google Gen AI SDK integration
+│       ├── geminiImage.ts # 🔄 Vertex AI SDK integration
 │       └── mockImage.ts   # ⏳ Test adapter
 ```
 
 ### Environment Requirements
 ```bash
-# Required
+# Required for ADC-only authentication
 GOOGLE_CLOUD_PROJECT=your-project-id
 GOOGLE_CLOUD_LOCATION=us-central1
 
@@ -120,6 +120,7 @@ GOOGLE_CLOUD_LOCATION=us-central1
 NN_PROVIDER=gemini|mock
 NN_CONCURRENCY=2
 NN_MAX_PER_IMAGE=50
+NN_PRICE_PER_IMAGE_USD=0.0025
 ```
 
 ## Vibe Coding Principles (Top 5)
@@ -308,10 +309,10 @@ pnpm test:e2e     # End-to-end tests
 ## Special Instructions
 
 ### When Implementing Gemini Adapter
-- Use `@google/generative-ai` NOT deprecated Vertex SDK
+- Use `@google-cloud/vertexai` with ADC-only authentication
 - Implement 3-layer style-only defense
 - Add exponential backoff for 429/503
-- Never log API keys or full URLs
+- Never log credentials or sensitive data
 - Default to dry-run mode
 
 ### When Building GUI

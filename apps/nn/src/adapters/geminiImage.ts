@@ -1,23 +1,23 @@
 import { VertexAI } from '@google-cloud/vertexai';
-import { readFile } from 'node:fs/promises';
-import { writeFile, mkdir } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import sharp from 'sharp';
+import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { 
   ImageGenProvider, 
   RenderRequest, 
-  RenderResult, 
-  Problem 
+  RenderResult
 } from '../types.js';
-import { validateGoogleCloudConfig, env } from '../config/env.js';
+import { env } from '../config/env.js';
 import { createOperationLogger, logError } from '../logger.js';
-import { generateFileHash, isStyleCopy } from '../core/idempotency.js';
+// Remove unused import
 import { STYLE_ONLY_PREFIX } from '../core/remix.js';
-
-/**
- * Style distance threshold - images with similarity > this are rejected
- */
-const STYLE_COPY_DISTANCE_MAX = 10;
+import { 
+  extractFirstImageBase64, 
+  toPngBufferFromB64, 
+  isBlockedResponse,
+  getBlockReason 
+} from './vertexResponse.js';
+import { passesStyleGuard } from '../core/styleGuard.js';
+import { tapRequestResponse } from '../lib/debugTap.js';
 
 /**
  * Sleep utility for retry backoff
@@ -35,6 +35,8 @@ async function withRetry<T>(
   maxRetries = 3,
   baseDelay = 1000
 ): Promise<T> {
+  const log = createOperationLogger('withRetry');
+  
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       return await fn();
@@ -54,6 +56,13 @@ async function withRetry<T>(
       const delay = Math.min(baseDelay * Math.pow(2, attempt), 30000);
       const jitter = Math.random() * delay;
       
+      log.debug({ 
+        operation, 
+        attempt: attempt + 1, 
+        maxRetries, 
+        jitterMs: Math.round(jitter) 
+      }, 'Retrying with backoff');
+      
       await sleep(jitter);
     }
   }
@@ -61,77 +70,9 @@ async function withRetry<T>(
   throw new Error(`Retry exhausted for ${operation}`);
 }
 
-/**
- * Generate perceptual hash for image similarity checking
- */
-async function generatePHash(buffer: Buffer): Promise<string> {
-  const { data, info } = await sharp(buffer)
-    .resize(32, 32)
-    .grayscale()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-  
-  // Simple pHash: compare pixels to average
-  const pixels = new Uint8Array(data);
-  const avg = pixels.reduce((sum, val) => sum + val, 0) / pixels.length;
-  
-  let hash = 0n;
-  for (let i = 0; i < pixels.length; i++) {
-    if (pixels[i]! > avg) {
-      hash |= 1n << BigInt(i);
-    }
-  }
-  
-  return hash.toString(16);
-}
-
-/**
- * Check if generated image passes style distance validation
- * Returns true if acceptable, false if too similar (potential copy)
- */
-async function passesStyleDistance(
-  generated: Buffer, 
-  styleRefs: string[]
-): Promise<boolean> {
-  const generatedHash = await generatePHash(generated);
-  
-  for (const refPath of styleRefs) {
-    try {
-      const refBuffer = await readFile(refPath);
-      const refHash = await generatePHash(refBuffer);
-      
-      // Calculate Hamming distance between hashes
-      const distance = hammingDistance(generatedHash, refHash);
-      
-      if (distance <= STYLE_COPY_DISTANCE_MAX) {
-        return false; // Too similar = potential copy
-      }
-    } catch (error) {
-      // If we can't read reference, skip this check
-      continue;
-    }
-  }
-  
-  return true; // Acceptable style transfer
-}
-
-/**
- * Calculate Hamming distance between two hex strings
- */
-function hammingDistance(hash1: string, hash2: string): number {
-  const maxLength = Math.max(hash1.length, hash2.length);
-  const a = BigInt(`0x${hash1.padStart(maxLength, '0')}`);
-  const b = BigInt(`0x${hash2.padStart(maxLength, '0')}`);
-  
-  let xor = a ^ b;
-  let distance = 0;
-  
-  while (xor > 0n) {
-    distance += Number(xor & 1n);
-    xor >>= 1n;
-  }
-  
-  return distance;
+interface GeminiAdapterConfig {
+  project: string;
+  location: string;
 }
 
 /**
@@ -141,16 +82,14 @@ export class GeminiImageAdapter implements ImageGenProvider {
   private vertex: VertexAI;
   private model: any;
   private log = createOperationLogger('GeminiImageAdapter');
-
-  constructor() {
-    // Validate Google Cloud configuration
-    validateGoogleCloudConfig();
+  constructor(config: GeminiAdapterConfig) {
     
     // Initialize Vertex AI with ADC (no API keys)
-    const project = env.GOOGLE_CLOUD_PROJECT!;
-    const location = env.GOOGLE_CLOUD_LOCATION;
+    this.vertex = new VertexAI({ 
+      project: config.project, 
+      location: config.location 
+    });
     
-    this.vertex = new VertexAI({ project, location });
     this.model = this.vertex.preview.getGenerativeModel({
       model: 'gemini-2.5-flash-image-preview',
       generationConfig: {
@@ -158,13 +97,18 @@ export class GeminiImageAdapter implements ImageGenProvider {
         maxOutputTokens: 4096,
       },
     });
+    
+    this.log.info({ 
+      project: config.project, 
+      location: config.location 
+    }, 'Initialized Gemini adapter');
   }
 
   /**
    * Render images from prompt batch
    */
   async render(request: RenderRequest): Promise<RenderResult> {
-    const { rows, variants, styleRefs, runMode } = request;
+    const { runMode } = request;
     
     if (runMode === 'dry_run') {
       return this.estimateCost(request);
@@ -205,62 +149,127 @@ export class GeminiImageAdapter implements ImageGenProvider {
     const { rows, variants, styleRefs } = request;
     const results: Array<{ id: string; prompt: string; outPath: string }> = [];
     
+    // Determine concurrency level
+    const totalImages = rows.length * variants;
+    const maxConcurrency = Math.min(
+      Number(env.NN_MAX_CONCURRENCY ?? 2),
+      4,  // Hard cap at 4 concurrent requests
+      Math.ceil(totalImages / 3)  // Scale with workload
+    );
+    
+    this.log.info({ 
+      totalImages, 
+      concurrency: maxConcurrency 
+    }, 'Starting batch generation');
+    
     // Ensure output directory exists
     const outputDir = join(env.NN_OUT_DIR, 'renders');
     await mkdir(outputDir, { recursive: true });
     
-    // Process each prompt with retries and validation
+    // Load style reference buffers for validation
+    const styleRefBuffers = await Promise.all(
+      styleRefs.map(path => readFile(path))
+    );
+    
+    // Create work items
+    const workItems: Array<{ row: any; variant: number; index: number }> = [];
     for (let i = 0; i < rows.length; i++) {
-      const row = rows[i]!;
-      
       for (let v = 0; v < variants; v++) {
-        const id = `${i}-${v}-${Date.now()}`;
-        
-        try {
-          const generated = await withRetry(
-            () => this.generateImage(row.prompt, styleRefs),
-            `generate-${id}`
-          );
-          
-          // Style distance validation
-          const passesValidation = await passesStyleDistance(generated, styleRefs);
-          if (!passesValidation) {
-            this.log.warn({ id, prompt: row.prompt.slice(0, 50) }, 
-                          'Style copy detected, retrying');
-            
-            // Retry up to 2 times with jitter
-            let retrySuccess = false;
-            for (let retry = 0; retry < 2 && !retrySuccess; retry++) {
-              await sleep(Math.random() * 2000);
-              const retryGenerated = await this.generateImage(row.prompt, styleRefs);
-              if (await passesStyleDistance(retryGenerated, styleRefs)) {
-                retrySuccess = true;
-                await this.saveImage(retryGenerated, id, outputDir);
-                break;
-              }
-            }
-            
-            if (!retrySuccess) {
-              this.log.error({ id }, 'Style validation failed after retries, skipping');
-              continue;
-            }
-          } else {
-            await this.saveImage(generated, id, outputDir);
-          }
-          
-          results.push({
-            id,
-            prompt: row.prompt,
-            outPath: join(outputDir, `${id}.png`),
-          });
-          
-        } catch (error) {
-          logError(this.log, error, `render-${id}`);
-        }
+        workItems.push({ row: rows[i]!, variant: v, index: i });
       }
     }
     
+    // Process with controlled concurrency
+    const inProgress = new Set<Promise<void>>();
+    
+    for (const item of workItems) {
+      // Wait if we're at max concurrency
+      if (inProgress.size >= maxConcurrency) {
+        await Promise.race(inProgress);
+      }
+      
+      // Start new work item
+      const work = this.processWorkItem(
+        item,
+        styleRefs,
+        styleRefBuffers,
+        outputDir,
+        results
+      ).finally(() => {
+        inProgress.delete(work);
+      });
+      
+      inProgress.add(work);
+    }
+    
+    // Wait for all remaining work
+    await Promise.all(inProgress);
+    
+    this.log.info({ 
+      completed: results.length, 
+      total: totalImages 
+    }, 'Batch generation complete');
+    
     return { results };
+  }
+  
+  /**
+   * Process a single work item (prompt + variant)
+   */
+  private async processWorkItem(
+    item: { row: any; variant: number; index: number },
+    styleRefs: string[],
+    styleRefBuffers: Buffer[],
+    outputDir: string,
+    results: Array<{ id: string; prompt: string; outPath: string }>
+  ): Promise<void> {
+    const id = `${item.index}-${item.variant}-${Date.now()}`;
+    
+    try {
+      const generated = await withRetry(
+        () => this.generateImage(item.row.prompt, styleRefs),
+        `generate-${id}`
+      );
+      
+      // Style guard validation
+      const passesValidation = await passesStyleGuard(
+        generated, 
+        styleRefBuffers
+      );
+      
+      if (!passesValidation) {
+        this.log.warn({ id, prompt: item.row.prompt.slice(0, 50) }, 
+                      'Style copy detected, retrying');
+        
+        // Retry with jitter
+        let retrySuccess = false;
+        for (let retry = 0; retry < 2 && !retrySuccess; retry++) {
+          await sleep(Math.random() * 2000);
+          const retryGenerated = await this.generateImage(item.row.prompt, styleRefs);
+          if (await passesStyleGuard(retryGenerated, styleRefBuffers)) {
+            retrySuccess = true;
+            await this.saveImage(retryGenerated, id, outputDir);
+            break;
+          }
+        }
+        
+        if (!retrySuccess) {
+          this.log.error({ id }, 'Style validation failed after retries, skipping');
+          return;
+        }
+      } else {
+        await this.saveImage(generated, id, outputDir);
+      }
+      
+      results.push({
+        id,
+        prompt: item.row.prompt,
+        outPath: join(outputDir, `${id}.png`),
+      });
+      
+    } catch (error) {
+      logError(this.log, error, `render-${id}`);
+    }
   }
 
   /**
@@ -280,7 +289,7 @@ export class GeminiImageAdapter implements ImageGenProvider {
         return {
           inlineData: {
             data: buffer.toString('base64'),
-            mimeType: 'image/jpeg', // Assume JPEG for now
+            mimeType: 'image/png',
           },
         };
       })
@@ -289,20 +298,36 @@ export class GeminiImageAdapter implements ImageGenProvider {
     // Combine prompt text with style references
     const userParts = [{ text: prompt }, ...styleParts];
     
-    const response = await this.model.generateContent({
+    const request = {
       contents: [
         systemPrompt,
         { role: 'user', parts: userParts },
       ],
-    });
+    };
     
-    // Extract image data from response
-    const candidate = response.response.candidates[0];
-    if (!candidate?.content?.parts?.[0]?.inlineData?.data) {
+    // Tap request if debug is enabled
+    await tapRequestResponse(request, null, 'generate-image');
+    
+    // Make the API call
+    const response = await this.model.generateContent(request);
+    
+    // Tap response if debug is enabled
+    await tapRequestResponse(null, response, 'generate-image');
+    
+    // Check if response was blocked
+    if (isBlockedResponse(response.response)) {
+      const reason = getBlockReason(response.response);
+      throw new Error(`Generation blocked: ${reason || 'Unknown reason'}`);
+    }
+    
+    // Extract image data using new parser
+    const imageBase64 = extractFirstImageBase64(response.response);
+    if (!imageBase64) {
       throw new Error('No image data in response');
     }
     
-    return Buffer.from(candidate.content.parts[0].inlineData.data, 'base64');
+    // Convert to PNG buffer
+    return toPngBufferFromB64(imageBase64);
   }
 
   /**
@@ -312,14 +337,16 @@ export class GeminiImageAdapter implements ImageGenProvider {
     const finalPath = join(outputDir, `${id}.png`);
     const tmpPath = `${finalPath}.tmp`;
     
+    // Write to temp file
     await writeFile(tmpPath, buffer);
-    await writeFile(finalPath, await readFile(tmpPath));
     
-    // Clean up temp file (ignore errors)
-    try {
-      await import('node:fs/promises').then(fs => fs.unlink(tmpPath));
-    } catch {
-      // Ignore cleanup errors
-    }
+    // Atomically rename to final path
+    await rename(tmpPath, finalPath);
+    
+    this.log.debug({ 
+      id, 
+      size: buffer.length, 
+      path: finalPath 
+    }, 'Saved image atomically');
   }
 }

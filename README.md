@@ -118,6 +118,7 @@ NN_PROVIDER=gemini          # or 'mock' for testing
 NN_OUT_DIR=./artifacts      # Output directory
 NN_CONCURRENCY=2            # Parallel operations
 NN_MAX_PER_IMAGE=50         # Max prompts per image
+NN_PRICE_PER_IMAGE_USD=0.0025  # Cost estimation (optional)
 ```
 
 ## Development
@@ -163,7 +164,7 @@ pnpm validate
 
 ## Security
 
-- **No secrets in code**: Uses ADC for Google Cloud auth
+- **ADC-only authentication**: Requires Application Default Credentials (no API keys in code)
 - **Localhost only GUI**: Ephemeral token for session auth
 - **CSV injection protection**: Escapes formula prefixes
 - **Path validation**: Constrains file access to artifacts/

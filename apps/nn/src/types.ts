@@ -143,7 +143,9 @@ export const ManifestSchema = z.object({
 
 export type Manifest = z.infer<typeof ManifestSchema>;
 
-// Provider Interface
+// Provider Interfaces
+
+// Synchronous provider (existing, for Vertex fallback)
 export interface ImageGenProvider {
   render(batch: {
     rows: PromptRow[];
@@ -153,6 +155,51 @@ export interface ImageGenProvider {
     runMode: 'dry_run' | 'live';
   }): Promise<RenderResult>;
 }
+
+// Asynchronous provider (new, for Gemini Batch)
+export interface AsyncImageGenProvider {
+  submit(req: { 
+    rows: PromptRow[]; 
+    variants: 1 | 2 | 3; 
+    styleOnly: true; 
+    styleRefs: string[]; 
+  }): Promise<{ jobId: string; estCount: number }>;
+  
+  poll(jobId: string): Promise<{ 
+    status: 'pending' | 'running' | 'succeeded' | 'failed'; 
+    completed?: number; 
+    total?: number; 
+    errors?: Problem[] 
+  }>;
+  
+  fetch(jobId: string, outDir: string): Promise<{ 
+    results: Array<{ id: string; prompt: string; outPath: string }>; 
+    problems: Problem[] 
+  }>;
+  
+  cancel(jobId: string): Promise<{ 
+    status: 'canceled' | 'not_found' 
+  }>;
+}
+
+// Job manifest for tracking batch jobs
+export const JobManifestSchema = z.object({
+  jobId: z.string(),
+  provider: z.enum(['gemini-batch', 'vertex']),
+  submittedAt: z.string().datetime(),
+  estCount: z.number(),
+  promptsHash: z.string().optional(),
+  styleRefsHash: z.string().optional(),
+  statusHistory: z.array(z.object({
+    timestamp: z.string().datetime(),
+    status: z.enum(['pending', 'running', 'succeeded', 'failed', 'canceled']),
+    completed: z.number().optional(),
+    total: z.number().optional(),
+  })),
+  problems: z.array(ProblemSchema).optional(),
+}).strict();
+
+export type JobManifest = z.infer<typeof JobManifestSchema>;
 
 // Configuration Types
 export const ConfigSchema = z.object({
