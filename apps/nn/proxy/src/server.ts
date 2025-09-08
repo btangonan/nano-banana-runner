@@ -10,6 +10,10 @@ import uploadRoutes from "./routes/ui.upload.js";
 import analyzeRoutes from "./routes/ui.analyze.js";
 import remixRoutes from "./routes/ui.remix.js";
 import savePromptsRoutes from "./routes/ui.savePrompts.js";
+import preflightRoutes from "./routes/ui.preflight.js";
+import submitRoutes from "./routes/ui.submit.js";
+import pollRoutes from "./routes/ui.poll.js";
+import fetchRoutes from "./routes/ui.fetch.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -40,6 +44,10 @@ async function main() {
   await app.register(analyzeRoutes);
   await app.register(remixRoutes);
   await app.register(savePromptsRoutes);
+  await app.register(preflightRoutes);
+  await app.register(submitRoutes);
+  await app.register(pollRoutes);
+  await app.register(fetchRoutes);
 
   // Start server
   await app.listen({ port: env.PORT, host: env.BIND_HOST });
