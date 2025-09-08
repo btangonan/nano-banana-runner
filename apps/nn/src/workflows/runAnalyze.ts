@@ -1,5 +1,6 @@
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { createOperationLogger, logTiming } from '../logger.js';
 import { analyzeImages, isSupportedImage } from '../core/analyze.js';
 import { FileSystemManifest } from '../adapters/fs-manifest.js';
@@ -86,7 +87,7 @@ export async function runAnalyze(opts: AnalyzeOptions): Promise<void> {
       title: 'Analysis workflow failed',
       detail: error instanceof Error ? error.message : 'Unknown error',
       status: 500,
-      instance: crypto.randomUUID()
+      instance: randomUUID()
     });
     
     throw error;

@@ -90,12 +90,37 @@ nn prompts dedupe tag --in <jsonl> --out <jsonl>
 nn prompts dedupe collapse --in <jsonl> --out <jsonl> --yes
 ```
 
-### GUI
+### GUI (Web Interface)
 
+The Nano Banana Studio provides a web-based interface served by the proxy at `/app/`.
+
+**Features:**
+- **Drag & Drop Upload**: Visual file upload with previews and validation
+- **Image Analysis**: Real-time analysis with progress tracking  
+- **Security**: Client and server-side validation, rate limiting
+- **Responsive**: Works on desktop and tablet devices
+
+**Access:**
 ```bash
-# Start local GUI (opens browser)
-nn gui [--port 4173] [--open]
+# Start proxy server (serves GUI at /app)
+cd proxy && pnpm dev
+
+# Or access directly
+open http://127.0.0.1:8787/app
 ```
+
+**Development:**
+```bash
+# GUI development server (with API proxy)
+cd apps/gui && pnpm dev
+open http://localhost:5173
+```
+
+**Architecture:**
+- React + TypeScript frontend with Tailwind CSS
+- Single-origin deployment (served by proxy)  
+- Zod contracts shared between client/server
+- RFC 7807 error handling with user-friendly messages
 
 ## Architecture
 
