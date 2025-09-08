@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { UploadAnalyze } from './pages/UploadAnalyze'
+import { RemixReview } from './pages/RemixReview'
 import { ToastContainer, useToast } from './components/ui/Toast'
 import { cn } from './lib/utils'
-import { CheckCircle, Circle, Upload } from 'lucide-react'
+import { CheckCircle, Upload, Shuffle, Send } from 'lucide-react'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -16,8 +17,8 @@ const queryClient = new QueryClient({
 
 const steps = [
   { id: 'upload', title: 'Upload & Analyze', icon: Upload },
-  { id: 'remix', title: 'Remix & Review', icon: Circle },
-  { id: 'submit', title: 'Submit & Monitor', icon: Circle },
+  { id: 'remix', title: 'Remix & Review', icon: Shuffle },
+  { id: 'submit', title: 'Submit & Monitor', icon: Send },
 ]
 
 function App() {
@@ -70,7 +71,11 @@ function App() {
       case 0:
         return <UploadAnalyze onNext={() => setCurrentStep(1)} toast={toast} />
       case 1:
-        return <div className="text-center text-muted-foreground">Remix & Review - Coming in Session 2</div>
+        return <RemixReview 
+          onNext={() => setCurrentStep(2)} 
+          onBack={() => setCurrentStep(0)} 
+          toast={toast} 
+        />
       case 2:
         return <div className="text-center text-muted-foreground">Submit & Monitor - Coming in Session 3</div>
       default:

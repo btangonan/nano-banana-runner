@@ -70,6 +70,62 @@ export const AnalyzeResponse = z.object({
 export type AnalyzeRequest = z.infer<typeof AnalyzeRequest>;
 export type AnalyzeResponse = z.infer<typeof AnalyzeResponse>;
 
+// Prompt Row (matches backend PromptRowSchema)
+export const PromptRow = z.object({
+  prompt: z.string().min(1).max(2000),
+  sourceImage: z.string(),
+  tags: z.array(z.string()),
+  seed: z.number().int().optional(),
+  strength: z.number().min(0).max(1).optional(),
+  _meta: z.object({
+    hashDistance: z.number().optional(),
+    flagged: z.boolean().optional(),
+  }).optional(),
+}).strict();
+
+export type PromptRow = z.infer<typeof PromptRow>;
+
+// Remix API schemas
+export const RemixRequest = z.object({
+  descriptorsPath: z.string().default('./artifacts/descriptors.json'),
+  maxPerImage: z.number().int().min(1).max(100).default(10),
+  seed: z.number().int().default(42),
+}).strict();
+
+export const RemixResponse = z.object({
+  count: z.number().min(0),
+  sourceImages: z.number().min(0),
+  avgPerImage: z.number().min(0),
+  duration: z.string(),
+  sample: z.array(PromptRow).max(5).optional(),
+  outputPath: z.string(),
+  promptsBySource: z.record(z.string(), z.number()),
+}).strict();
+
+export type RemixRequest = z.infer<typeof RemixRequest>;
+export type RemixResponse = z.infer<typeof RemixResponse>;
+
+// Save Prompts API schemas
+export const SavePromptsRequest = z.object({
+  prompts: z.array(PromptRow).min(1).max(10000),
+  outputPath: z.string().default('./artifacts/prompts.jsonl'),
+  format: z.enum(['jsonl', 'csv']).default('jsonl'),
+}).strict();
+
+export const SavePromptsResponse = z.object({
+  success: z.literal(true),
+  outputPath: z.string(),
+  format: z.enum(['jsonl', 'csv']),
+  saved: z.number().min(0),
+  sourceImages: z.number().min(0),
+  avgPerImage: z.number().min(0),
+  duration: z.string(),
+  promptsBySource: z.record(z.string(), z.number()),
+}).strict();
+
+export type SavePromptsRequest = z.infer<typeof SavePromptsRequest>;
+export type SavePromptsResponse = z.infer<typeof SavePromptsResponse>;
+
 // API Error response wrapper
 export const ApiResponse = <T extends z.ZodTypeAny>(dataSchema: T) => z.object({
   success: z.literal(true),

@@ -18,27 +18,40 @@ export function isSupportedImage(path: string): boolean {
   return SUPPORTED_FORMATS.has(ext);
 }
 
+type RGB = { r: number; g: number; b: number };
+
+function rgbToHex(c: RGB): string {
+  const clamp = (n: number) => Math.max(0, Math.min(255, Math.round(n)));
+  const r = clamp(c.r);
+  const g = clamp(c.g);
+  const b = clamp(c.b);
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+
 /**
- * Extract dominant colors from image using k-means quantization
+ * Extract palette using raw pixel data (primary method)
  */
-async function extractPalette(
-  buffer: Buffer,
-  maxColors: number = 5
-): Promise<string[]> {
-  const result = await sharp(buffer)
-    .resize(100, 100, { fit: 'inside' }) // Resize for faster processing
+async function extractPalettePrimary(buffer: Buffer, maxColors: number = 5): Promise<string[]> {
+  // Normalize to sRGB, remove alpha, get raw pixels + info
+  const { data, info } = await sharp(buffer)
+    .resize(100, 100, { fit: 'inside' })
+    .toColorspace('srgb')
+    .removeAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
-  
-  // Simple color quantization (k-means would be more accurate but heavier)
-  const pixels = new Uint8Array(result.data);
+
+  if (!data || !info || info.channels !== 3) {
+    throw new Error('Invalid raw image data');
+  }
+
+  // Simple color quantization with frequency counting
   const colorMap = new Map<string, number>();
   
-  for (let i = 0; i < pixels.length; i += result.info.channels) {
-    const r = Math.floor(pixels[i]! / 32) * 32; // Quantize to 3 bits
-    const g = Math.floor(pixels[i + 1]! / 32) * 32;
-    const b = Math.floor(pixels[i + 2]! / 32) * 32;
-    const hex = `#${[r, g, b].map(c => c.toString(16).padStart(2, '0')).join('')}`;
+  for (let i = 0; i < data.length; i += 3) {
+    const r = Math.floor(data[i]! / 32) * 32; // Quantize to reduce similar colors
+    const g = Math.floor(data[i + 1]! / 32) * 32;
+    const b = Math.floor(data[i + 2]! / 32) * 32;
+    const hex = rgbToHex({ r, g, b });
     colorMap.set(hex, (colorMap.get(hex) || 0) + 1);
   }
   
@@ -47,6 +60,59 @@ async function extractPalette(
     .sort((a, b) => b[1] - a[1])
     .slice(0, maxColors)
     .map(([color]) => color);
+}
+
+/**
+ * Extract palette using Sharp stats (fallback method)
+ */
+async function extractPaletteFallback(buffer: Buffer): Promise<string[]> {
+  const stats = await sharp(buffer).toColorspace('srgb').stats();
+  
+  // Get dominant color
+  const dominant = rgbToHex({ 
+    r: stats.dominant.r, 
+    g: stats.dominant.g, 
+    b: stats.dominant.b 
+  });
+  
+  // Add approximate additional colors from channel peaks
+  const colors = new Set([dominant]);
+  
+  if (stats.channels && stats.channels.length >= 3) {
+    // Add colors based on channel statistics
+    const rPeak = stats.channels[0]?.max || 128;
+    const gPeak = stats.channels[1]?.max || 128;
+    const bPeak = stats.channels[2]?.max || 128;
+    
+    colors.add(rgbToHex({ r: rPeak, g: 64, b: 64 }));
+    colors.add(rgbToHex({ r: 64, g: gPeak, b: 64 }));
+    colors.add(rgbToHex({ r: 64, g: 64, b: bPeak }));
+  }
+  
+  return Array.from(colors).slice(0, 5);
+}
+
+/**
+ * Extract dominant colors from image with robust error handling
+ */
+async function extractPalette(
+  buffer: Buffer,
+  maxColors: number = 5
+): Promise<string[]> {
+  try {
+    return await extractPalettePrimary(buffer, maxColors);
+  } catch (error) {
+    // Log the primary extraction failure but continue with fallback
+    console.warn('Primary palette extraction failed, using fallback:', error);
+    
+    try {
+      return await extractPaletteFallback(buffer);
+    } catch (fallbackError) {
+      // Final backstop: return neutral palette
+      console.warn('Fallback palette extraction failed, using neutral colors:', fallbackError);
+      return ['#808080', '#404040', '#c0c0c0', '#606060', '#a0a0a0'].slice(0, maxColors);
+    }
+  }
 }
 
 /**
