@@ -2,7 +2,8 @@ import type {
   ImageGenProvider, 
   AsyncImageGenProvider, 
   PromptRow, 
-  RenderResult 
+  RenderResult,
+  ProviderName
 } from '../types.js';
 import { env } from '../config/env.js';
 import { createOperationLogger } from '../logger.js';
@@ -135,22 +136,29 @@ class SyncProviderWrapper implements UnifiedProvider {
 }
 
 /**
- * Provider factory - creates unified provider based on configuration
- * Priority: batch (default) → vertex (fallback) → mock (testing)
+ * Provider factory - creates unified provider based on configuration with per-job override support
+ * Priority: per-job override → env default → batch (fallback)
  */
-export function createProvider(): UnifiedProvider {
-  const provider = env.NN_PROVIDER;
+export function createProvider(providerOverride?: ProviderName): UnifiedProvider {
+  const defaultProvider = (env.NN_PROVIDER === 'vertex' ? 'vertex' : 'batch') as ProviderName;
+  const chosen = providerOverride ?? defaultProvider;
   
-  log.info({ provider }, 'Creating provider');
+  log.info({ chosen, defaultProvider, override: providerOverride }, 'Creating provider with override support');
   
-  switch (provider) {
+  switch (chosen) {
     case 'batch':
       log.info('Using Gemini Batch (async) provider');
       return new BatchProviderWrapper(new GeminiBatchAdapter());
       
     case 'vertex':
       if (!env.GOOGLE_CLOUD_PROJECT) {
-        throw new Error('GOOGLE_CLOUD_PROJECT is required for vertex provider');
+        const err: any = {
+          type: 'about:blank',
+          title: 'Vertex provider requires ADC configuration',
+          detail: 'GOOGLE_CLOUD_PROJECT is required for vertex provider. Configure ADC or use --provider batch',
+          status: 400
+        };
+        throw Object.assign(new Error(err.detail), err);
       }
       log.info('Using Vertex AI (sync fallback) provider');
       return new SyncProviderWrapper(new GeminiImageAdapter({
@@ -158,13 +166,14 @@ export function createProvider(): UnifiedProvider {
         location: env.GOOGLE_CLOUD_LOCATION
       }));
       
-    case 'mock':
-      log.info('Using Mock (testing) provider');
-      return new SyncProviderWrapper(new MockImageAdapter());
-      
     default:
-      log.warn({ provider }, 'Unknown provider, defaulting to batch');
-      return new BatchProviderWrapper(new GeminiBatchAdapter());
+      const err: any = {
+        type: 'about:blank',
+        title: 'Unknown provider',
+        detail: `provider=${String(chosen)}. Must be 'batch' or 'vertex'`,
+        status: 400
+      };
+      throw Object.assign(new Error(err.detail), err);
   }
 }
 
@@ -183,7 +192,7 @@ export function isDirectResult(result: GenerateResult): result is { type: 'direc
 }
 
 /**
- * Convenience function for workflows - handles provider selection automatically
+ * Convenience function for workflows - handles provider selection automatically with override support
  */
 export async function generateImages(req: {
   rows: PromptRow[];
@@ -191,7 +200,8 @@ export async function generateImages(req: {
   styleOnly: boolean;
   styleRefs: string[];
   runMode: 'dry_run' | 'live';
+  provider?: ProviderName;  // per-job override
 }): Promise<GenerateResult> {
-  const provider = createProvider();
+  const provider = createProvider(req.provider);
   return provider.generate(req);
 }

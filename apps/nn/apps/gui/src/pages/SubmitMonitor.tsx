@@ -34,7 +34,7 @@ export function SubmitMonitor({ onNext, onBack, toast }: SubmitMonitorProps) {
   // Form state
   const [promptsPath] = useState('./artifacts/prompts.jsonl')
   const [styleDir] = useState('./images')
-  const [provider, setProvider] = useState<'gemini-batch' | 'vertex-ai'>('gemini-batch')
+  const [provider, setProvider] = useState<'batch' | 'vertex'>('batch')
   const [variants, setVariants] = useState<1 | 2 | 3>(1)
   const [runMode, setRunMode] = useState<'dry-run' | 'live'>('dry-run')
 
@@ -246,9 +246,14 @@ export function SubmitMonitor({ onNext, onBack, toast }: SubmitMonitorProps) {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Submit & Monitor</h1>
-          <p className="text-muted-foreground">Generate images and track progress</p>
+        <div className="flex items-center gap-4">
+          <Button variant="outline" size="sm" onClick={onBack}>
+            ← Back
+          </Button>
+          <div>
+            <h1 className="text-2xl font-semibold">Submit & Monitor</h1>
+            <p className="text-muted-foreground">Generate images and track progress</p>
+          </div>
         </div>
         {renderStatusBadge()}
       </div>
@@ -266,13 +271,13 @@ export function SubmitMonitor({ onNext, onBack, toast }: SubmitMonitorProps) {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="text-sm font-medium mb-2 block">Provider</label>
-              <Select value={provider} onValueChange={(value: 'gemini-batch' | 'vertex-ai') => setProvider(value)}>
+              <Select value={provider} onValueChange={(value: 'batch' | 'vertex') => setProvider(value)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="gemini-batch">Gemini Batch ($0.000125/img)</SelectItem>
-                  <SelectItem value="vertex-ai">Vertex AI ($0.0025/img)</SelectItem>
+                  <SelectItem value="batch">Gemini Batch ($0.000125/img)</SelectItem>
+                  <SelectItem value="vertex">Vertex AI ($0.0025/img)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -392,18 +397,62 @@ export function SubmitMonitor({ onNext, onBack, toast }: SubmitMonitorProps) {
 
                 {/* Status-specific actions */}
                 {'completed' in jobState.pollData && jobState.pollData.completed && (
-                  <div className="flex gap-2 pt-4">
-                    <Button onClick={handleViewGallery} className="flex items-center gap-2">
-                      <Eye className="w-4 h-4" />
-                      View Gallery
-                    </Button>
-                    <Button variant="outline" asChild>
-                      <a href={jobState.pollData.actions.fetchResults} className="flex items-center gap-2">
-                        <Download className="w-4 h-4" />
-                        Download Results
-                      </a>
-                    </Button>
-                  </div>
+                  <>
+                    {/* Dry-run results */}
+                    {jobState.pollData.result && jobState.pollData.result.message?.includes('Dry-run') && (
+                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="font-medium text-blue-900 mb-2">Dry Run Results</div>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="text-blue-700">Total Images:</span>
+                            <span className="ml-2 font-semibold">{jobState.pollData.result.estimatedImages}</span>
+                          </div>
+                          <div>
+                            <span className="text-blue-700">Estimated Cost:</span>
+                            <span className="ml-2 font-semibold">{jobState.pollData.result.estimatedCost}</span>
+                          </div>
+                          <div>
+                            <span className="text-blue-700">Estimated Time:</span>
+                            <span className="ml-2 font-semibold">{jobState.pollData.result.estimatedTime}</span>
+                          </div>
+                          <div>
+                            <span className="text-blue-700">Provider:</span>
+                            <span className="ml-2 font-semibold">{jobState.pollData.result.provider}</span>
+                          </div>
+                        </div>
+                        <div className="mt-3 p-2 bg-blue-100 rounded text-blue-900 text-sm">
+                          ✅ {jobState.pollData.result.message}
+                        </div>
+                        <Button 
+                          onClick={() => {
+                            setRunMode('live')
+                            setJobState({ status: 'ready' })
+                          }}
+                          className="mt-3 w-full"
+                          variant="default"
+                        >
+                          <Play className="w-4 h-4 mr-2" />
+                          Run Live Generation
+                        </Button>
+                      </div>
+                    )}
+                    
+                    {/* Live completion actions */}
+                    {!jobState.pollData.result?.message?.includes('Dry-run') && (
+                      <div className="flex gap-2 pt-4">
+                        <Button onClick={handleViewGallery} className="flex items-center gap-2">
+                          <Eye className="w-4 h-4" />
+                          View Gallery
+                        </Button>
+                        <Button variant="outline" asChild>
+                          <a href={jobState.pollData.actions.fetchResults} className="flex items-center gap-2">
+                            <Download className="w-4 h-4" />
+                            Download Results
+                          </a>
+                        </Button>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {'failed' in jobState.pollData && jobState.pollData.failed && (
@@ -425,11 +474,7 @@ export function SubmitMonitor({ onNext, onBack, toast }: SubmitMonitorProps) {
       )}
 
       {/* Actions */}
-      <div className="flex justify-between">
-        <Button variant="outline" onClick={onBack}>
-          Back
-        </Button>
-
+      <div className="flex justify-end">
         <div className="flex gap-2">
           {jobState.status === 'idle' && (
             <Button 

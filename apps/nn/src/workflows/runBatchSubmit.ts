@@ -1,15 +1,16 @@
 import { readdir, mkdir, writeFile } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 import { createOperationLogger, logTiming } from '../logger.js';
-import { geminiBatchProvider } from '../adapters/geminiBatch.js';
+import { createProvider } from '../adapters/providerFactory.js';
 import { FileSystemManifest } from '../adapters/fs-manifest.js';
-import { PromptRow, JobManifest } from '../types.js';
+import { PromptRow, JobManifest, ProviderName } from '../types.js';
 import { env } from '../config/env.js';
 import { loadReferencePack, getPackDigest, getTotalRefCount, getActiveModes } from '../config/refs.js';
 import { RefMode, ReferencePack } from '../types/refs.js';
 import { preflight, loadBudgetsFromEnv } from './preflight.js';
 
 interface BatchSubmitOptions {
+  provider?: ProviderName;        // per-job override (optional)
   promptsPath: string;
   styleDir?: string;
   refsPath?: string;
@@ -28,6 +29,7 @@ export async function runBatchSubmit(opts: BatchSubmitOptions): Promise<void> {
   const startTime = Date.now();
   
   log.info({ 
+    provider: opts.provider,
     promptsPath: opts.promptsPath,
     styleDir: opts.styleDir,
     refsPath: opts.refsPath,
@@ -162,24 +164,53 @@ export async function runBatchSubmit(opts: BatchSubmitOptions): Promise<void> {
       return;
     }
     
-    // Submit batch job
-    const result = await geminiBatchProvider.submit({
+    // Create provider with override support
+    const provider = createProvider(opts.provider);
+    
+    // Submit job using provider factory
+    const result = await provider.generate({
       rows,
       variants: opts.variants,
       styleOnly: true,
-      styleRefs
+      styleRefs,
+      runMode: opts.dryRun ? 'dry_run' : 'live'
     });
     
-    // Create job manifest with extended metadata
+    // Handle different result types from provider
+    let jobId: string;
+    let estCount: number;
+    const chosenProvider = opts.provider ?? (env.NN_PROVIDER === 'vertex' ? 'vertex' : 'batch');
+    const providerName = chosenProvider === 'vertex' ? 'vertex' : 'gemini-batch';
+    
+    if (result.type === 'batch_job') {
+      jobId = result.jobId;
+      estCount = result.estCount;
+    } else {
+      // Direct result from sync provider (e.g., vertex)
+      jobId = `direct-${Date.now()}`;
+      estCount = result.result.results.length;
+      
+      // For direct results, we're already done
+      console.log('\n✅ Direct generation completed!');
+      console.log(`   Provider: ${chosenProvider}`);
+      console.log(`   Generated images: ${estCount}`);
+      if (result.result.costPlan) {
+        console.log(`   Estimated cost: $${result.result.costPlan.estimatedCost}`);
+        console.log(`   Estimated time: ${result.result.costPlan.estimatedTime}`);
+      }
+      return;
+    }
+
+    // Create job manifest with extended metadata (for async batch jobs)
     const jobManifest: JobManifest & { 
       refMode?: string; 
       referencePackDigest?: string;
       preflight?: any;
     } = {
-      jobId: result.jobId,
-      provider: 'gemini-batch',
+      jobId,
+      provider: providerName as any,
       submittedAt: new Date().toISOString(),
-      estCount: result.estCount,
+      estCount,
       promptsHash: crypto.randomUUID(), // TODO: compute actual hash
       styleRefsHash: packDigest,
       statusHistory: [{
@@ -200,11 +231,11 @@ export async function runBatchSubmit(opts: BatchSubmitOptions): Promise<void> {
     // Save job manifest
     const jobsDir = join(env.NN_OUT_DIR, 'jobs');
     await mkdir(jobsDir, { recursive: true });
-    const manifestPath = join(jobsDir, `${result.jobId}.json`);
+    const manifestPath = join(jobsDir, `${jobId}.json`);
     await writeFile(manifestPath, JSON.stringify(jobManifest, null, 2));
     
     log.info({ 
-      jobId: result.jobId,
+      jobId,
       manifestPath 
     }, 'Job manifest saved');
     
@@ -214,22 +245,24 @@ export async function runBatchSubmit(opts: BatchSubmitOptions): Promise<void> {
       opts.promptsPath,
       manifestPath,
       {
-        jobId: result.jobId,
-        estCount: result.estCount,
+        jobId,
+        estCount,
         prompts: rows.length,
         styleRefs: styleRefs.length,
-        variants: opts.variants
+        variants: opts.variants,
+        provider: chosenProvider
       }
     );
     
     logTiming(log, 'runBatchSubmit', startTime);
     
     console.log('\n✅ Batch job submitted!');
-    console.log(`   Job ID: ${result.jobId}`);
-    console.log(`   Estimated images: ${result.estCount}`);
+    console.log(`   Job ID: ${jobId}`);
+    console.log(`   Provider: ${chosenProvider}`);
+    console.log(`   Estimated images: ${estCount}`);
     console.log(`   Manifest: ${manifestPath}`);
-    console.log('\n   Poll status: nn batch poll --job ' + result.jobId);
-    console.log('   Watch: nn batch poll --job ' + result.jobId + ' --watch');
+    console.log('\n   Poll status: nn batch poll --job ' + jobId);
+    console.log('   Watch: nn batch poll --job ' + jobId + ' --watch');
     
   } catch (error) {
     log.error({ error }, 'Batch submit failed');

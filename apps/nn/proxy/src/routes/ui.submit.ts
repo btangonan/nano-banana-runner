@@ -18,7 +18,7 @@ export default async function submitRoutes(fastify: FastifyInstance) {
     promptsPath: z.string().default('./artifacts/prompts.jsonl'),
     styleDir: z.string().default('./images'),
     referencePack: z.string().optional(), // Path to refs.json/yaml
-    provider: z.enum(['gemini-batch', 'vertex-ai']).default('gemini-batch'),
+    provider: z.enum(['batch', 'vertex']).optional(), // Per-job provider override
     refMode: z.enum(['style', 'prop', 'subject', 'pose', 'environment', 'mixed']).default('style'),
     variants: z.union([z.literal(1), z.literal(2), z.literal(3)]).default(1),
     concurrency: z.number().int().min(1).max(10).default(2),
@@ -28,23 +28,7 @@ export default async function submitRoutes(fastify: FastifyInstance) {
     split: z.boolean().default(true),
   }).strict();
 
-  // In-memory job tracking (simple implementation)
-  const jobs = new Map<string, {
-    id: string;
-    status: 'submitted' | 'running' | 'completed' | 'failed';
-    provider: string;
-    promptCount: number;
-    estimatedImages: number;
-    startTime: Date;
-    endTime?: Date;
-    progress?: {
-      current: number;
-      total: number;
-      stage: string;
-    };
-    result?: any;
-    error?: string;
-  }>();
+  // Jobs Map is now initialized in server.ts and available via fastify.jobs
 
   fastify.post('/ui/submit', async (request, reply) => {
     const startTime = Date.now();
@@ -66,7 +50,7 @@ export default async function submitRoutes(fastify: FastifyInstance) {
         promptsPath, 
         styleDir, 
         referencePack, 
-        provider, 
+        provider,  // Per-job provider override
         refMode,
         variants, 
         concurrency,
@@ -104,7 +88,7 @@ export default async function submitRoutes(fastify: FastifyInstance) {
         jobId,
         promptsPath,
         styleDir,
-        provider,
+        provider: provider || 'default',
         refMode,
         variants,
         runMode,
@@ -186,11 +170,11 @@ export default async function submitRoutes(fastify: FastifyInstance) {
           stage: 'initializing',
         },
       };
-      jobs.set(jobId, job);
+      fastify.jobs.set(jobId, job);
 
       // Execute workflow asynchronously
       const workflowPromise = executeWorkflow(
-        provider,
+        provider, // Pass the provider override
         {
           promptsPath,
           styleDir,
@@ -204,14 +188,13 @@ export default async function submitRoutes(fastify: FastifyInstance) {
           split,
         },
         jobId,
-        jobs,
         fastify
       );
 
       // Don't await - return immediately with job ID
       workflowPromise.catch(error => {
         fastify.log.error({ jobId, error: error.message }, 'Workflow execution failed');
-        const job = jobs.get(jobId);
+        const job = fastify.jobs.get(jobId);
         if (job) {
           job.status = 'failed';
           job.error = error.message;
@@ -224,7 +207,7 @@ export default async function submitRoutes(fastify: FastifyInstance) {
       const response = {
         jobId,
         status: 'submitted',
-        provider,
+        provider: provider || 'default',
         runMode,
         prompts: promptCount,
         estimatedImages,
@@ -300,8 +283,7 @@ export default async function submitRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Expose jobs map for other routes
-  fastify.decorate('jobs', jobs);
+  // Jobs Map is already exposed via server.ts initialization
 
   fastify.log.info('Submit route registered at POST /ui/submit');
 }
@@ -313,47 +295,64 @@ async function executeWorkflow(
   provider: string,
   options: any,
   jobId: string,
-  jobs: Map<string, any>,
   fastify: FastifyInstance
 ): Promise<void> {
-  const job = jobs.get(jobId);
+  const job = fastify.jobs.get(jobId);
   if (!job) return;
 
+  // Capture dry-run output (moved to outer scope for proper visibility)
+  let dryRunOutput: any = null;
+  
   try {
     job.status = 'running';
     job.progress.stage = 'starting';
 
-    if (provider === 'gemini-batch') {
-      // Use batch submission workflow
-      job.progress.stage = 'batch-submit';
-      await runBatchSubmit({
-        promptsPath: options.promptsPath,
-        styleDir: options.styleDir,
-        refsPath: options.referencePack,
-        refMode: options.refMode,
+    // Always use batch submission workflow with provider override
+    job.progress.stage = 'batch-submit';
+    
+    // For dry-run, we need to capture console output
+    if (options.runMode === 'dry-run') {
+      const { readFile } = await import('node:fs/promises');
+      const promptsContent = await readFile(options.promptsPath, 'utf-8');
+      const promptCount = promptsContent.trim().split('\n').filter(line => line.trim()).length;
+      const estimatedImages = promptCount * options.variants;
+      const estimatedTime = Math.ceil(estimatedImages / 4) * 3; // Rough estimate
+      
+      dryRunOutput = {
+        promptCount,
         variants: options.variants,
-        compress: options.compress,
-        split: options.split,
-        dryRun: options.runMode === 'dry-run',
-      });
-    } else {
-      // Use direct render workflow
-      job.progress.stage = 'rendering';
-      await runRender({
-        promptsPath: options.promptsPath,
-        styleDir: options.styleDir,
-        outDir: options.outDir,
-        variants: options.variants,
-        concurrency: options.concurrency,
-        dryRun: options.runMode === 'dry-run',
-      });
+        estimatedImages,
+        estimatedTime: `${estimatedTime}s`,
+        estimatedCost: provider === 'vertex' 
+          ? `$${(estimatedImages * 0.0025).toFixed(4)}` 
+          : `$${(estimatedImages * 0.000125).toFixed(4)}`,
+        message: 'Dry-run complete. Run with --live to submit actual job.',
+        provider: provider || 'batch'
+      };
     }
+    
+    await runBatchSubmit({
+      provider: provider, // Pass provider override to workflow
+      promptsPath: options.promptsPath,
+      styleDir: options.styleDir,
+      refsPath: options.referencePack,
+      refMode: options.refMode,
+      variants: options.variants,
+      compress: options.compress,
+      split: options.split,
+      dryRun: options.runMode === 'dry-run',
+    });
 
-    // Mark as completed
+    // Mark as completed with result
     job.status = 'completed';
     job.endTime = new Date();
     job.progress.current = job.progress.total;
     job.progress.stage = 'completed';
+    
+    // Store dry-run output if available
+    if (dryRunOutput) {
+      job.result = dryRunOutput;
+    }
 
     fastify.log.info({ jobId, provider }, 'Workflow execution completed');
 
@@ -366,9 +365,4 @@ async function executeWorkflow(
   }
 }
 
-// Extend FastifyInstance type
-declare module "fastify" {
-  interface FastifyInstance {
-    jobs: Map<string, any>;
-  }
-}
+// FastifyInstance type is extended in server.ts

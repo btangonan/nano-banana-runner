@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { z } from 'zod';
 import { loadEnv } from './config/env.js';
 import { runAnalyze } from './workflows/runAnalyze.js';
 import { runRemix } from './workflows/runRemix.js';
@@ -184,6 +185,7 @@ batch
   .option('--style-dir <dir>', 'style reference images directory (legacy)')
   .option('--refs <file>', 'reference pack YAML/JSON file')
   .option('--ref-mode <mode>', 'reference mode: style|prop|subject|pose|environment|mixed', 'style')
+  .option('--provider <name>', 'provider override: batch|vertex (overrides default)')
   .option('--variants <n>', 'variants per prompt (1-3)', '1')
   .option('--dry-run', 'estimate only (default)', true)
   .option('--live', 'submit actual job', false)
@@ -206,6 +208,10 @@ batch
         throw new Error(`Invalid ref-mode: ${opts.refMode}. Must be one of: ${validModes.join(', ')}`);
       }
       
+      // Validate provider override if provided
+      const ProviderEnum = z.enum(['batch', 'vertex']);
+      const provider = opts.provider ? ProviderEnum.parse(opts.provider) : undefined;
+      
       // Check for refs specification
       if (!opts.refs && !opts.styleDir) {
         throw new Error('Either --refs or --style-dir must be specified');
@@ -224,6 +230,7 @@ batch
       }
       
       await runBatchSubmit({
+        provider,
         promptsPath: opts.prompts,
         styleDir: opts.styleDir,
         refsPath: opts.refs,

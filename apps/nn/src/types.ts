@@ -201,6 +201,23 @@ export const JobManifestSchema = z.object({
 
 export type JobManifest = z.infer<typeof JobManifestSchema>;
 
+// Provider Types for per-job overrides
+export type ProviderName = "batch" | "vertex";
+
+export interface SubmitOptions {
+  provider?: ProviderName;        // per-job override (optional)
+  promptsPath: string;
+  styleDir?: string;
+  refsPath?: string;
+  refMode?: string;
+  variants: 1 | 2 | 3;
+  compress?: boolean;
+  split?: boolean;
+  live?: boolean;
+  yes?: boolean;
+  dryRun: boolean;
+}
+
 // Configuration Types
 export const ConfigSchema = z.object({
   provider: z.enum(['gemini', 'mock']).default('gemini'),
