@@ -1,0 +1,228 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  NODE_VERSION: '20'
+  PNPM_VERSION: '8'
+
+jobs:
+  # Fast unit tests without external dependencies
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Run unit tests
+        run: pnpm test --run --exclude="**/*batch*.spec.ts"
+        env:
+          NODE_ENV: test
+          NN_PROVIDER: mock
+          SKIP_BATCH_TESTS: true
+          SKIP_LIVE_BATCH_TESTS: true
+
+  # Integration tests with batch proxy
+  batch-integration:
+    name: Batch Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Start batch proxy
+        run: |
+          docker-compose up -d batch-proxy
+          # Wait for proxy to be healthy
+          timeout 30 bash -c 'until curl -f http://localhost:8787/healthz; do sleep 1; done'
+
+      - name: Run batch integration tests
+        run: pnpm test test/smoke.batch.spec.ts --run
+        env:
+          NODE_ENV: test
+          BATCH_PROXY_URL: http://localhost:8787
+          NN_PROVIDER: batch
+          SKIP_LIVE_BATCH_TESTS: false
+
+      - name: Collect proxy logs on failure
+        if: failure()
+        run: |
+          mkdir -p test-artifacts
+          docker-compose logs batch-proxy > test-artifacts/batch-proxy.log || true
+          curl -f http://localhost:8787/healthz > test-artifacts/proxy-health.json || true
+          
+      - name: Upload test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: batch-test-logs
+          path: test-artifacts/
+          retention-days: 7
+
+      - name: Cleanup
+        if: always()
+        run: docker-compose down -v
+
+  # Security and quality checks
+  security:
+    name: Security & Quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for gitleaks
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run gitleaks (secret detection)
+        run: pnpm run gitleaks
+
+      - name: Audit dependencies
+        run: pnpm audit --audit-level moderate
+
+      - name: Check for security vulnerabilities
+        run: |
+          if pnpm audit --audit-level high --json | grep -q '"high":\|"critical":'; then
+            echo "❌ High or critical security vulnerabilities found"
+            pnpm audit --audit-level high
+            exit 1
+          else
+            echo "✅ No high or critical security vulnerabilities"
+          fi
+
+  # Build verification
+  build:
+    name: Build Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build main app
+        run: pnpm build
+
+      - name: Build proxy
+        run: |
+          cd proxy
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Test CLI commands
+        run: |
+          # Test CLI loads without errors
+          node dist/cli.js --help
+          
+      - name: Verify proxy Docker build
+        run: |
+          docker build -f proxy/Dockerfile -t nn-proxy:test proxy/
+
+  # Final status check
+  ci-status:
+    name: CI Status
+    runs-on: ubuntu-latest
+    needs: [unit-tests, batch-integration, security, build]
+    if: always()
+
+    steps:
+      - name: Check CI status
+        run: |
+          if [[ "${{ needs.unit-tests.result }}" != "success" ]]; then
+            echo "❌ Unit tests failed"
+            exit 1
+          fi
+          if [[ "${{ needs.batch-integration.result }}" != "success" ]]; then
+            echo "❌ Batch integration tests failed"
+            exit 1
+          fi
+          if [[ "${{ needs.security.result }}" != "success" ]]; then
+            echo "❌ Security checks failed"
+            exit 1
+          fi
+          if [[ "${{ needs.build.result }}" != "success" ]]; then
+            echo "❌ Build verification failed"
+            exit 1
+          fi
+          echo "✅ All CI checks passed"

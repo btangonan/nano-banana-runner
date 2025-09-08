@@ -6,7 +6,8 @@ Terminal image analyzer → prompt remixer → Gemini image generator with style
 
 - 🖼️ **Image Analysis**: Extract metadata, palette, and attributes from images
 - 🎨 **Prompt Remixing**: Generate variations with deterministic control
-- 🤖 **Vertex AI Integration**: Generate images using Gemini 2.5 Flash
+- 🤖 **Gemini Batch API**: Secure proxy-based image generation via Gemini Batch (primary)
+- 🔄 **Vertex AI Fallback**: Direct Vertex API for sync operations when needed
 - 🎯 **Style-Only Conditioning**: Preserve style without copying composition
 - 📊 **CSV Export/Import**: Round-trip prompt editing
 - 🔍 **Duplicate Detection**: Find near-duplicates with SimHash
@@ -18,13 +19,17 @@ Terminal image analyzer → prompt remixer → Gemini image generator with style
 # Install dependencies
 pnpm install
 
-# Copy and configure environment
+# Configure environment (Batch-first, proxy-based)
 cp .env.example .env
-# Edit .env with your GOOGLE_CLOUD_PROJECT
+# Edit .env with:
+#   BATCH_PROXY_URL=http://127.0.0.1:8787 (or your proxy URL)
+#   NN_PROVIDER=batch (default)
+#   PREFLIGHT_COMPRESS=true (auto-compress reference images)
+#   PREFLIGHT_SPLIT=true (auto-split large jobs)
 
-# Set up Google Cloud auth
-gcloud auth application-default login
-gcloud config set project YOUR_PROJECT_ID
+# Optional: For Vertex AI fallback
+#   GOOGLE_CLOUD_PROJECT=your-project-id
+#   gcloud auth application-default login
 
 # Build the CLI
 pnpm build
@@ -35,8 +40,8 @@ pnpm nn analyze --in ./images --out ./artifacts
 # Generate prompt variations
 pnpm nn remix --descriptors ./artifacts/descriptors.json --out ./artifacts/prompts.jsonl
 
-# Preview render cost (dry-run)
-pnpm nn render --prompts ./artifacts/prompts.jsonl --style-dir ./images --dry-run
+# Preview batch cost (dry-run) - uses proxy
+pnpm nn batch submit --prompts ./artifacts/prompts.jsonl --style-dir ./images --dry-run
 
 # Launch GUI for prompt QC
 pnpm nn gui
@@ -53,7 +58,12 @@ nn analyze --in <dir> --out <dir> [--concurrency 4]
 # Remix prompts
 nn remix --descriptors <file> --out <file> [--max-per-image 50] [--seed 42]
 
-# Render images
+# Batch image generation (default, uses proxy)
+nn batch submit --prompts <file> --style-dir <dir> [--dry-run] [--live --yes]
+nn batch poll --job <id> [--watch]
+nn batch fetch --job <id> [--out <dir>]
+
+# Direct render (Vertex fallback)
 nn render --prompts <file> --style-dir <dir> [--dry-run] [--live --yes]
 ```
 
@@ -99,27 +109,80 @@ apps/nn/
 │   │   ├── remix.ts        # Prompt generation
 │   │   └── dedupe.ts       # Duplicate detection
 │   ├── adapters/           # External integrations
-│   │   ├── geminiImage.ts  # Vertex AI client
-│   │   └── fs-manifest.ts  # File operations
-│   └── workflows/          # Orchestration
+│   │   ├── providerFactory.ts   # Unified provider interface
+│   │   ├── geminiBatch.ts       # Gemini Batch API client (default)
+│   │   ├── batchRelayClient.ts  # Proxy client
+│   │   ├── geminiImage.ts       # Vertex AI client (fallback)
+│   │   └── fs-manifest.ts       # File operations
+│   ├── workflows/          # Orchestration
+│   │   └── preflight.ts    # Size limits and validation
+│   └── types/              # Schema definitions
 ├── web/                    # React GUI
+├── proxy/                  # Batch relay proxy service
+│   ├── src/
+│   │   ├── server.ts       # Fastify server
+│   │   ├── routes/batch.ts # Batch API routes
+│   │   └── clients/        # Gemini Batch client
 └── tests/                  # Test suite
 ```
 
 ## Environment Variables
 
 ```bash
-# Required for Vertex AI
-GOOGLE_CLOUD_PROJECT=your-project-id
-GOOGLE_CLOUD_LOCATION=us-central1
+# Batch-first Architecture (Default)
+NN_PROVIDER=batch           # 'batch' (default) | 'vertex' | 'mock'
+BATCH_PROXY_URL=http://127.0.0.1:8787  # Proxy server URL
+BATCH_MAX_BYTES=104857600   # 100MB batch size limit
 
-# Optional configuration
-NN_PROVIDER=gemini          # or 'mock' for testing
+# Batch Guardrails
+JOB_MAX_BYTES=209715200     # 200MB job size limit
+ITEM_MAX_BYTES=8388608      # 8MB item size limit
+MAX_IMAGES_PER_JOB=2000     # Image count limit per job
+
+# Optional: Vertex AI Fallback
+GOOGLE_CLOUD_PROJECT=your-project-id  # Required for vertex provider
+GOOGLE_CLOUD_LOCATION=us-central1     # Vertex AI region
+
+# General Configuration
 NN_OUT_DIR=./artifacts      # Output directory
 NN_CONCURRENCY=2            # Parallel operations
 NN_MAX_PER_IMAGE=50         # Max prompts per image
 NN_PRICE_PER_IMAGE_USD=0.0025  # Cost estimation (optional)
+
+# Feature Flags
+NN_STYLE_GUARD_ENABLED=true # Style-only conditioning enforcement
+NN_ENABLE_CACHE=true        # Response caching
+PREFLIGHT_COMPRESS=true     # Reference image compression
+PREFLIGHT_SPLIT=true        # Auto-split large jobs
 ```
+
+## Proxy Service
+
+The Batch Relay Proxy securely manages Gemini Batch API keys server-side:
+
+```bash
+# Start proxy in development
+cd proxy
+cp .env.example .env
+# Edit .env with GEMINI_BATCH_API_KEY
+pnpm install
+pnpm dev  # Runs on http://127.0.0.1:8787
+
+# Health check
+curl http://127.0.0.1:8787/healthz
+
+# Production deployment (Cloud Run)
+gcloud run deploy nn-batch-relay \
+  --source proxy/ \
+  --set-secrets="GEMINI_BATCH_API_KEY=gemini-batch-key:latest" \
+  --region=us-central1
+```
+
+**Security Features:**
+- API keys never exposed to CLI client
+- Redacted logging (no sensitive data in logs)
+- Local/Cloud Run deployment options
+- Secret Manager integration for production
 
 ## Development
 
@@ -164,10 +227,15 @@ pnpm validate
 
 ## Security
 
-- **ADC-only authentication**: Requires Application Default Credentials (no API keys in code)
+- **Proxy-based API key management**: Keys stored server-side, never exposed to CLI
+- **ADC fallback**: Vertex AI uses Application Default Credentials (when enabled)
 - **Localhost only GUI**: Ephemeral token for session auth
+- **Redacted logging**: No sensitive data in logs (API keys, responses)
 - **CSV injection protection**: Escapes formula prefixes
 - **Path validation**: Constrains file access to artifacts/
+- **Style-only conditioning**: Prevents composition copying via perceptual hashing
+- **Batch guardrails**: Cost estimation, size limits, auto-compression, job splitting
+- **CLI safety**: --dry-run defaults, --live --yes confirmation gates
 
 ## Performance
 

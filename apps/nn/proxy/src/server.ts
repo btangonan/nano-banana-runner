@@ -1,6 +1,6 @@
 import "dotenv/config";
 import fastify from "fastify";
-import sensible from "fastify-sensible";
+import sensible from "@fastify/sensible";
 import { loadEnv } from "./config/env.js";
 import { log } from "./logger.js";
 import batchRoutes from "./routes/batch.js";

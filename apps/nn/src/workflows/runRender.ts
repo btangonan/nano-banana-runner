@@ -1,10 +1,14 @@
 import { readdir } from 'node:fs/promises';
 import { join, extname } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { createOperationLogger, logTiming } from '../logger.js';
-import { GeminiImageAdapter } from '../adapters/geminiImage.js';
+import { 
+  generateImages, 
+  isBatchJob, 
+  isDirectResult
+} from '../adapters/providerFactory.js';
 import { FileSystemManifest } from '../adapters/fs-manifest.js';
-import { hasRecentProbe } from './runProbe.js';
-import type { RenderRequest, PromptRow } from '../types.js';
+import type { PromptRow } from '../types.js';
 import { env } from '../config/env.js';
 
 interface RenderOptions {
@@ -25,7 +29,7 @@ function getSupportedImageFiles(files: string[]): string[] {
 }
 
 /**
- * Render images from prompts using Gemini 2.5 Flash (dry-run or live)
+ * Render images from prompts using configured provider (batch-first, vertex fallback)
  */
 export async function runRender(opts: RenderOptions): Promise<void> {
   const log = createOperationLogger('runRender');
@@ -37,21 +41,11 @@ export async function runRender(opts: RenderOptions): Promise<void> {
     outDir: opts.outDir,
     variants: opts.variants,
     concurrency: opts.concurrency,
-    dryRun: opts.dryRun
+    dryRun: opts.dryRun,
+    provider: env.NN_PROVIDER
   }, `Starting render workflow (${opts.dryRun ? 'dry-run' : 'live'})`);
 
   try {
-    // Check for recent probe if running live
-    if (!opts.dryRun) {
-      const hasProbe = await hasRecentProbe();
-      if (!hasProbe) {
-        throw new Error(
-          'No recent probe found. Run "nn probe" first to verify Vertex AI connectivity. ' +
-          'This safety check prevents accidental API calls and spending.'
-        );
-      }
-      log.info('Recent probe found, proceeding with live generation');
-    }
     // Read prompts from JSONL file
     const manifest = new FileSystemManifest();
     const promptsContent = await manifest.readFile(opts.promptsPath);
@@ -78,69 +72,94 @@ export async function runRender(opts: RenderOptions): Promise<void> {
     
     log.info({ count: styleRefs.length }, 'Found style reference images');
     
-    // Create render request
-    const request: RenderRequest = {
+    // Generate using configured provider (batch-first, vertex fallback)
+    const result = await generateImages({
       rows: prompts,
       variants: opts.variants as 1 | 2 | 3,
-      styleOnly: true,
-      styleRefs,
+      styleOnly: true, // Always enforce style-only conditioning
+      styleRefs: styleFiles.map(f => join(opts.styleDir, f)),
       runMode: opts.dryRun ? 'dry_run' : 'live'
-    };
-    
-    // Initialize Gemini adapter (works for both dry-run and live)
-    const adapter = new GeminiImageAdapter({
-      project: env.GOOGLE_CLOUD_PROJECT!,
-      location: env.GOOGLE_CLOUD_LOCATION
     });
     
-    // Execute render (dry-run cost estimation or actual generation)
-    const result = await adapter.render(request);
-    
-    if (opts.dryRun) {
-      // Display cost estimation
-      if (result.costPlan) {
-        log.info({ 
-          costPlan: result.costPlan 
+    if (isBatchJob(result)) {
+      // Batch provider: job submitted, return job info
+      log.info({ 
+        jobId: result.jobId, 
+        estCount: result.estCount 
+      }, 'Batch job submitted');
+      
+      if (opts.dryRun) {
+        console.log('\n📊 Batch Estimation:');
+        console.log(`   Prompts: ${prompts.length}`);
+        console.log(`   Variants: ${opts.variants}`);
+        console.log(`   Total images: ${result.estCount}`);
+        console.log(`   Estimated time: ${Math.ceil(result.estCount / 10)}s`);
+        console.log('\n   Run with --live --yes to submit actual job');
+      } else {
+        console.log(`\n✅ Batch job submitted: ${result.jobId}`);
+        console.log(`   Estimated images: ${result.estCount}`);
+        console.log(`   Use: nn batch poll --job ${result.jobId} --watch`);
+        console.log(`   Then: nn batch fetch --job ${result.jobId}`);
+      }
+      
+    } else if (isDirectResult(result)) {
+      // Sync provider: images generated directly
+      const renderResult = result.result;
+      
+      if (opts.dryRun) {
+        // Display cost estimation for sync provider
+        if (renderResult.costPlan) {
+          log.info({ 
+            costPlan: renderResult.costPlan 
         }, 'Cost estimation completed');
         
         // Pretty print cost information
         console.log('\n📊 Cost Estimation:');
-        console.log(`   Images: ${result.costPlan.imageCount}`);
-        if (result.costPlan.estimatedCost) {
-          console.log(`   Estimated cost: $${result.costPlan.estimatedCost.toFixed(4)}`);
+        console.log(`   Images: ${renderResult.costPlan.imageCount}`);
+        if (renderResult.costPlan.estimatedCost) {
+          console.log(`   Estimated cost: $${renderResult.costPlan.estimatedCost.toFixed(4)}`);
         }
-        console.log(`   Estimated time: ${result.costPlan.estimatedTime}`);
-        console.log(`   Concurrency: ${result.costPlan.concurrency}`);
-        if (result.costPlan.warning) {
-          console.log(`   ⚠️  ${result.costPlan.warning}`);
+        console.log(`   Estimated time: ${renderResult.costPlan.estimatedTime}`);
+        console.log(`   Concurrency: ${renderResult.costPlan.concurrency}`);
+        if (renderResult.costPlan.warning) {
+          console.log(`   ⚠️  ${renderResult.costPlan.warning}`);
         }
-        if (result.costPlan.priceNote) {
-          console.log(`   💡 ${result.costPlan.priceNote}`);
+        if (renderResult.costPlan.priceNote) {
+          console.log(`   💡 ${renderResult.costPlan.priceNote}`);
         }
       }
-    } else {
-      // Log live generation results
-      log.info({ 
-        generated: result.results.length,
-        outputDir: opts.outDir 
-      }, 'Live generation completed');
-      
-      console.log(`\n✅ Generated ${result.results.length} images in ${opts.outDir}`);
+      } else {
+        // Log live generation results for sync provider
+        log.info({ 
+          generated: renderResult.results.length,
+          outputDir: opts.outDir 
+        }, 'Live generation completed');
+        
+        console.log(`\n✅ Generated ${renderResult.results.length} images in ${opts.outDir}`);
+      }
     }
     
-    // Record success in manifest
+    // Record success in manifest with appropriate metadata
+    const metadata = {
+      prompts: prompts.length,
+      styleRefs: styleRefs.length,
+      variants: opts.variants,
+      runMode: opts.dryRun ? 'dry_run' : 'live',
+      provider: env.NN_PROVIDER,
+      ...(isBatchJob(result) 
+        ? { jobId: result.jobId, estCount: result.estCount }
+        : { 
+            results: result.result.results.length, 
+            costPlan: result.result.costPlan 
+          }
+      )
+    };
+    
     await manifest.recordSuccess(
       'render',
       opts.promptsPath,
       opts.dryRun ? 'dry-run-estimation' : opts.outDir,
-      {
-        prompts: prompts.length,
-        styleRefs: styleRefs.length,
-        variants: opts.variants,
-        runMode: opts.dryRun ? 'dry_run' : 'live',
-        results: result.results.length,
-        costPlan: result.costPlan
-      }
+      metadata
     );
     
     logTiming(log, 'runRender', startTime);
@@ -156,7 +175,7 @@ export async function runRender(opts: RenderOptions): Promise<void> {
       title: 'Render workflow failed',
       detail: error instanceof Error ? error.message : 'Unknown error',
       status: 500,
-      instance: crypto.randomUUID()
+      instance: randomUUID()
     });
     
     throw error;

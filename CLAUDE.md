@@ -3,8 +3,9 @@
 ## Quick Reference
 **Project**: Nano Banana Runner (nn) - Image analyzer → prompt remixer → Gemini generator  
 **Location**: `/Users/bradleytangonan/Desktop/my apps/gemini image analyzer/`  
-**Stack**: TypeScript, Node 20, Vertex AI SDK, Fastify, React, Zod  
-**Status**: Core modules implemented, adapters in progress
+**Stack**: TypeScript, Node 20, Gemini Batch API, Fastify, React, Zod  
+**Architecture**: Batch-first with proxy service, Vertex AI fallback  
+**Status**: ✅ Batch-first implementation complete with guardrails
 
 ## Active SuperClaude Commands
 
@@ -73,54 +74,86 @@
 
 ### Current Implementation Status
 ✅ **Completed**:
-- Git repository initialized
+- Batch-first architecture with proxy service
+- Gemini Batch API integration (default provider)
+- Provider factory with unified interface (batch/vertex/mock)
+- Comprehensive batch limits and guardrails:
+  - Cost estimation with warnings
+  - Preflight checks with size limits
+  - Auto-compression and deduplication
+  - CLI safety with --dry-run defaults
+  - Style-only enforcement
+- Smoke tests for batch operations (smoke.batch.spec.ts)
+- CI/CD with docker-compose and GitHub Actions
+- Environment configuration with batch defaults
+- Proxy service with health checks and security
 - TypeScript configuration (strict mode)
 - Zod schemas for all data types
-- Environment validation with ADC
 - Pino logger with request tracing
 - Idempotency helpers (SHA256)
 - Image analysis with Sharp
-- CLAUDE.md playbook
-
-🔄 **In Progress**:
-- Gemini adapter with Vertex AI SDK
-- Prompt remix engine
-- CLI with commander
+- CLI with batch commands
 
 ⏳ **Pending**:
 - GUI with Fastify + React
 - CSV export/import
 - Duplicate detection
-- E2E tests
+- Reference pack system completion
 
 ### Key Files and Locations
 ```
 apps/nn/
 ├── src/
 │   ├── types.ts           # ✅ Zod schemas (strict validation)
-│   ├── config/env.ts      # ✅ Environment with ADC support
+│   ├── config/env.ts      # ✅ Batch-first environment config
+│   ├── cli.ts             # ✅ CLI with batch commands
 │   ├── logger.ts          # ✅ Pino with no secrets logging
 │   ├── core/
 │   │   ├── analyze.ts     # ✅ Sharp-based image analysis
 │   │   ├── idempotency.ts # ✅ SHA256 and similarity checks
-│   │   ├── remix.ts       # 🔄 Prompt generation (next task)
+│   │   ├── styleGuard.ts  # ✅ Style-only conditioning
+│   │   ├── remix.ts       # ✅ Prompt generation
 │   │   └── dedupe.ts      # ⏳ SimHash duplicate detection
-│   └── adapters/
-│       ├── geminiImage.ts # 🔄 Vertex AI SDK integration
-│       └── mockImage.ts   # ⏳ Test adapter
+│   ├── adapters/
+│   │   ├── providerFactory.ts # ✅ Unified provider interface
+│   │   ├── geminiBatch.ts # ✅ Gemini Batch API client (default)
+│   │   ├── batchRelayClient.ts # ✅ Proxy client
+│   │   ├── geminiImage.ts # ✅ Vertex AI fallback
+│   │   └── fs-manifest.ts # ✅ File operations
+│   ├── workflows/         # ✅ Batch orchestration
+│   │   └── preflight.ts   # ✅ Size limits and validation
+│   └── types/             # ✅ Reference pack schemas
+├── proxy/                 # ✅ Batch relay proxy service
+├── test/
+│   └── smoke.batch.spec.ts # ✅ Batch integration tests
+├── .github/workflows/ci.yml # ✅ CI/CD pipeline
+└── docker-compose.yml     # ✅ Service orchestration
 ```
 
 ### Environment Requirements
 ```bash
-# Required for ADC-only authentication
-GOOGLE_CLOUD_PROJECT=your-project-id
+# Batch-first Architecture (Default)
+NN_PROVIDER=batch                    # batch (default) | vertex | mock
+BATCH_PROXY_URL=http://127.0.0.1:8787
+BATCH_MAX_BYTES=104857600            # 100MB batch size limit
+
+# Preflight Guardrails
+JOB_MAX_BYTES=209715200              # 200MB job size limit
+ITEM_MAX_BYTES=8388608               # 8MB item size limit
+MAX_IMAGES_PER_JOB=2000              # Image count limit
+PREFLIGHT_COMPRESS=true              # Auto-compress reference images
+PREFLIGHT_SPLIT=true                 # Auto-split oversized jobs
+
+# Optional: Vertex AI Fallback
+GOOGLE_CLOUD_PROJECT=your-project-id # Required for vertex provider
 GOOGLE_CLOUD_LOCATION=us-central1
 
-# Optional
-NN_PROVIDER=gemini|mock
+# Performance & Features
 NN_CONCURRENCY=2
 NN_MAX_PER_IMAGE=50
-NN_PRICE_PER_IMAGE_USD=0.0025
+NN_STYLE_GUARD_ENABLED=true
+PREFLIGHT_COMPRESS=true
+PREFLIGHT_SPLIT=true
 ```
 
 ## Vibe Coding Principles (Top 5)
@@ -276,21 +309,21 @@ pnpm test:e2e     # End-to-end tests
 ## Current Task Context
 
 ### Active TODO List
-1. 🔄 Update CLAUDE.md with SuperClaude commands
-2. ⏳ Implement core/remix.ts for prompt generation
-3. ⏳ Create geminiImage.ts with Gen AI SDK
-4. ⏳ Build mockImage.ts for testing
-5. ⏳ Implement fs-manifest.ts
-6. ⏳ Create CLI with commander
-7. ⏳ Build workflows (analyze, remix, render)
-8. ⏳ Add retry logic
-9. ⏳ Write tests
+✅ **Batch-First Architecture Complete**:
+1. ✅ Set Gemini Batch as default provider in config
+2. ✅ Create smoke.batch.spec.ts for proxy testing
+3. ✅ Update docs to reflect Batch-first architecture
+4. ✅ Simplify CI to proxy-only (remove Vertex containers)
+5. ✅ Add provider factory with Batch primary, Vertex fallback
+6. ✅ Implement Batch limits and guardrails
 
-### Next Actions
-1. Complete remix.ts with seeded RNG
-2. Implement Gemini adapter with style-only guards
-3. Wire up CLI commands
-4. Test with mock provider first
+### Next Phase
+⏳ **Implementation Completion**:
+1. Complete core/remix.ts for prompt generation
+2. Enhance reference pack system
+3. GUI development with Fastify + React
+4. CSV export/import functionality
+5. Duplicate detection with SimHash
 
 ## Troubleshooting
 

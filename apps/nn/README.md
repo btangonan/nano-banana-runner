@@ -1,15 +1,17 @@
 # Nano Banana Runner (nn)
 
-Style-transfer-safe batch image generation using Gemini Batch (primary) with Vertex AI fallback.
+Style-transfer-safe batch image generation using Gemini Batch API (primary) with comprehensive guardrails and Vertex AI fallback.
 
 ## Features
 
 - **Async batch processing** via Gemini Batch API (primary provider)
+- **Comprehensive guardrails**: Cost estimation, size limits, auto-compression
 - **Style-only image generation** with perceptual hash validation
 - **Resumable jobs** with manifest tracking
 - **Secure API key handling** via proxy service
 - **Vertex AI fallback** for synchronous operations
-- **Cost estimation** with dry-run mode
+- **CLI safety**: --dry-run defaults, --live --yes confirmation
+- **Provider factory** with unified interface (batch/vertex/mock)
 - **Debug mode** with request/response logging
 
 ## Prerequisites
@@ -152,8 +154,17 @@ Options:
 ## Environment Variables
 
 ### Batch Relay (Primary)
-- `NN_BATCH_RELAY`: Batch relay URL (default: http://127.0.0.1:8787)
+- `NN_PROVIDER`: Provider selection (default: 'batch', options: 'batch'|'vertex'|'mock')
+- `BATCH_PROXY_URL`: Batch relay URL (default: http://127.0.0.1:8787)
 - `GEMINI_BATCH_API_KEY`: API key for proxy (set in proxy/.env, never in CLI)
+- `BATCH_MAX_BYTES`: Batch size limit (default: 100MB)
+
+### Batch Guardrails
+- `JOB_MAX_BYTES`: Job size limit (default: 200MB)
+- `ITEM_MAX_BYTES`: Item size limit (default: 8MB)
+- `MAX_IMAGES_PER_JOB`: Image count limit (default: 2000)
+- `PREFLIGHT_COMPRESS`: Auto-compress images (default: true)
+- `PREFLIGHT_SPLIT`: Auto-split large jobs (default: true)
 
 ### Vertex AI (Fallback)
 - `GOOGLE_CLOUD_PROJECT`: Your GCP project ID (or set via gcloud)
@@ -209,20 +220,28 @@ node scripts/calibrate-guard.js calibration
 
 ## Architecture
 
-### ADC-Only Authentication
-- No API keys in code or environment
-- Uses Application Default Credentials
-- Secure by default with gcloud auth
+### Security Architecture
+- **Proxy-based API management**: Keys server-side only, never exposed to CLI
+- **ADC fallback**: Vertex AI uses Application Default Credentials (when enabled)
+- **Redacted logging**: No sensitive data in logs
+
+### Batch Guardrails
+- **Cost estimation**: Preview costs before live execution
+- **Size limits**: Job, item, and image count boundaries
+- **Auto-compression**: Resize images to 1024px, JPEG quality 75
+- **Deduplication**: SHA256 hashing prevents duplicate references
+- **Job splitting**: Large jobs automatically chunked
+- **CLI safety**: --dry-run defaults, --live --yes confirmation gates
 
 ### Three-Layer Style Defense
 1. System prompt with style-only instruction
 2. Multimodal parts with style references
 3. Post-generation perceptual hash validation
 
-### Retry Strategy
-- Truncated exponential backoff with full jitter
-- Max 3 retries for transient errors
-- Style validation retries with different seeds
+### Provider Factory Pattern
+- **Unified interface**: Abstract async batch vs sync vertex differences
+- **Automatic selection**: Batch (primary) → Vertex (fallback) → Mock (testing)
+- **Result handling**: Batch jobs vs direct results seamlessly managed
 
 ## Troubleshooting
 

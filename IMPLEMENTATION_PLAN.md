@@ -1,9 +1,109 @@
-# Implementation Plan: Remix Module + Gemini Adapter
+# Nano Banana Runner - Implementation Plan
 
 ## Overview
-Implement two critical modules for the Nano Banana Runner:
-1. **core/remix.ts**: Deterministic prompt generation from image descriptors
-2. **adapters/geminiImage.ts**: Google Gen AI SDK integration with style-only conditioning
+**Status**: ✅ Phase 1 Complete - Batch-First Architecture with Guardrails  
+**Next**: Phase 2 - Core Implementation (remix, GUI, CSV ops)
+
+## Phase 1: Batch-First Architecture ✅ COMPLETE
+
+### Architecture Goals ✅
+- Gemini Batch API as primary provider (not Vertex AI direct)
+- Secure proxy pattern with server-side API key management
+- Comprehensive cost controls and safety guardrails
+- Vertex AI as fallback for sync operations when needed
+- Provider factory pattern for unified interface
+
+### Implementation Complete ✅
+
+#### 1. Provider Architecture ✅
+- **Provider Factory** (`src/adapters/providerFactory.ts`):
+  - Unified interface abstracting async batch vs sync vertex differences
+  - `BatchProviderWrapper` for async batch operations (submit → poll → fetch)
+  - `SyncProviderWrapper` for direct vertex operations
+  - Automatic provider selection: batch (default) → vertex (fallback) → mock (testing)
+
+#### 2. Batch Guardrails ✅
+- **Cost Estimation**: Preview costs with `NN_PRICE_PER_IMAGE_USD`
+- **Size Limits**: `JOB_MAX_BYTES` (200MB), `ITEM_MAX_BYTES` (8MB), `MAX_IMAGES_PER_JOB` (2000)
+- **Auto-Compression**: Resize images to 1024px, JPEG quality 75
+- **Deduplication**: SHA256 hashing prevents duplicate reference images
+- **Job Splitting**: Large jobs automatically chunked when exceeding limits
+- **Preflight Validation**: Comprehensive checks before submission
+
+#### 3. CLI Safety ✅
+- **Default Safe**: `--dry-run` is default for `render` and `batch submit`
+- **Explicit Override**: `--live` flag required for actual generation
+- **Confirmation Gates**: `--yes` flag mandatory for live operations with billing
+- **Input Validation**: Comprehensive parameter validation and bounds checking
+
+#### 4. Environment Configuration ✅
+- **Batch-first defaults**: `NN_PROVIDER=batch` (default)
+- **Proxy configuration**: `BATCH_PROXY_URL`, `BATCH_MAX_BYTES`
+- **Guardrail settings**: `PREFLIGHT_COMPRESS=true`, `PREFLIGHT_SPLIT=true`
+- **Fallback support**: Vertex AI configuration when needed
+
+#### 5. Testing & CI/CD ✅
+- **Smoke Tests**: `test/smoke.batch.spec.ts` for batch integration
+- **Simplified CI**: Docker proxy-only, native Node testing
+- **GitHub Actions**: Automated testing with docker-compose
+- **Health Checks**: Proxy service monitoring
+
+#### 6. Documentation ✅
+- **Updated Architecture**: All READMEs reflect batch-first approach
+- **Security Model**: Proxy-based API key management documented
+- **CLI Usage**: Batch commands and safety features explained
+- **Environment Setup**: Clear configuration instructions
+
+### Key Files Implemented ✅
+
+```
+apps/nn/
+├── src/adapters/providerFactory.ts    # ✅ Unified provider interface
+├── src/workflows/preflight.ts         # ✅ Size limits and validation  
+├── src/config/env.ts                  # ✅ Batch-first environment config
+├── test/smoke.batch.spec.ts           # ✅ Batch integration tests
+├── .github/workflows/ci.yml           # ✅ Simplified CI pipeline
+├── docker-compose.yml                 # ✅ Proxy service orchestration
+└── proxy/                             # ✅ Batch relay service
+```
+
+## Phase 2: Core Implementation 🔄 NEXT
+
+### Priority Tasks
+1. **Remix Engine** (`src/core/remix.ts`):
+   - Deterministic prompt generation with seeded RNG
+   - Template-based variations with style preservation
+   - Integration with provider factory
+
+2. **Reference Pack System**:
+   - Complete YAML/JSON schema implementation
+   - Multi-reference type support (style, props, subject, pose, environment)
+   - Reference validation and optimization
+
+3. **GUI Development**:
+   - Fastify + React prompt editor
+   - Virtual scrolling for large datasets  
+   - Real-time batch job monitoring
+   - Cost estimation display
+
+4. **CSV Operations**:
+   - Export prompts to CSV for external editing
+   - Import modified CSV with validation
+   - Round-trip fidelity testing
+
+5. **Duplicate Detection**:
+   - SimHash implementation for prompt similarity
+   - Configurable similarity thresholds
+   - Batch deduplication workflows
+
+### Success Criteria
+- [ ] End-to-end pipeline: analyze → remix → batch submit → fetch
+- [ ] GUI can handle 1000+ prompts with <300ms load time
+- [ ] CSV round-trip maintains data integrity
+- [ ] Duplicate detection achieves >95% accuracy
+- [ ] All operations respect cost controls and safety guards
+
+## Previous Implementation Details (Phase 2 Reference)
 
 ## Phase 1: Remix Module Implementation
 
