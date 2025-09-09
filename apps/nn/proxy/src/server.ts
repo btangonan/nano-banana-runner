@@ -91,7 +91,12 @@ async function main() {
   // Configure CORS
   const allowedOrigins = env.ALLOWED_ORIGINS 
     ? env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
-    : ['http://localhost:5174', 'http://127.0.0.1:5174']; // Default to local dev
+    : [
+        'http://localhost:5174', 
+        'http://127.0.0.1:5174',
+        'http://localhost:8787',  // Allow proxy's own origin
+        'http://127.0.0.1:8787'   // Allow proxy's own origin
+      ]; // Default to local dev
     
   await app.register(cors, {
     origin: (origin, cb) => {

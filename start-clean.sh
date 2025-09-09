@@ -130,8 +130,10 @@ cleanup_all() {
     
     # Kill processes by port
     kill_port $PROXY_PORT "Proxy Server"
-    kill_port $GUI_PORT "GUI Server"
-    kill_port $VITE_HMR_PORT "Vite HMR"
+    # Note: GUI_PORT and VITE_HMR_PORT are kept for backward compatibility
+    # in case old processes are still running
+    kill_port $GUI_PORT "Old GUI Server (if any)"
+    kill_port $VITE_HMR_PORT "Old Vite HMR (if any)"
     
     # Kill all pnpm dev processes in our directories
     log "Killing all pnpm dev processes..."
@@ -159,6 +161,7 @@ cleanup_all() {
     
     # Wait for ports to be free
     wait_for_port_free $PROXY_PORT
+    # Also clean old ports if they were in use
     wait_for_port_free $GUI_PORT
     wait_for_port_free $VITE_HMR_PORT
     
@@ -207,23 +210,17 @@ start_proxy() {
     wait_for_service "http://127.0.0.1:${PROXY_PORT}/healthz" "Proxy"
 }
 
-start_gui() {
-    log "Starting GUI server..."
+build_gui_if_needed() {
+    log "Checking if GUI needs to be built..."
     
-    cd "$GUI_DIR"
-    
-    # Create log directory
-    mkdir -p "$LOG_DIR"
-    
-    # Start GUI in background
-    nohup pnpm dev > "${LOG_DIR}/gui.log" 2>&1 &
-    local pid=$!
-    echo $pid >> "$PID_FILE"
-    
-    log "  GUI started with PID $pid"
-    
-    # Wait for it to be ready
-    wait_for_service "http://localhost:${GUI_PORT}/app/" "GUI"
+    if [ ! -d "${GUI_DIR}/dist" ]; then
+        log "GUI dist not found, building..."
+        cd "$GUI_DIR"
+        pnpm build
+        success "GUI built successfully!"
+    else
+        log "GUI dist exists, skipping build"
+    fi
 }
 
 verify_services() {
@@ -243,11 +240,11 @@ verify_services() {
         warning "Batch routes may not be registered"
     fi
     
-    # Check GUI
-    if curl -s -o /dev/null -w "%{http_code}" "http://localhost:${GUI_PORT}/app/" | grep -q "200\|304"; then
-        success "GUI is accessible"
+    # Check GUI (served statically by proxy)
+    if curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${PROXY_PORT}/app/" | grep -q "200\|304"; then
+        success "GUI is accessible at /app/"
     else
-        error "GUI is not accessible"
+        error "GUI is not accessible at /app/"
     fi
 }
 
@@ -256,7 +253,7 @@ verify_services() {
 # ============================================================================
 
 cmd_start() {
-    log "Starting NN Image Analyzer services..."
+    log "Starting NN Image Analyzer service..."
     
     # Check for lock file
     if [ -f "$LOCK_FILE" ]; then
@@ -275,10 +272,12 @@ cmd_start() {
         clear_caches
     fi
     
-    # Start services
+    # Build GUI if needed
+    build_gui_if_needed
+    
+    # Start proxy server (serves both API and GUI)
     start_proxy
     sleep 2  # Give proxy time to fully initialize
-    start_gui
     
     # Verify everything is working
     verify_services
@@ -287,10 +286,10 @@ cmd_start() {
     rm -f "$LOCK_FILE"
     
     echo ""
-    success "All services started successfully!"
+    success "Service started successfully!"
     echo ""
     echo "  🚀 Proxy API: http://127.0.0.1:${PROXY_PORT}"
-    echo "  🎨 GUI: http://localhost:${GUI_PORT}/app/"
+    echo "  🎨 GUI: http://127.0.0.1:${PROXY_PORT}/app/"
     echo ""
     echo "  📝 Logs: ${LOG_DIR}/"
     echo "  🔧 PID file: ${PID_FILE}"
@@ -317,20 +316,14 @@ cmd_status() {
     echo "================================"
     echo ""
     
-    # Check proxy
+    # Check proxy (serves both API and GUI)
     if is_port_in_use $PROXY_PORT; then
-        success "Proxy: Running on port $PROXY_PORT"
+        success "Proxy Server: Running on port $PROXY_PORT"
         echo "  PIDs: $(lsof -ti :$PROXY_PORT | tr '\n' ' ')"
+        echo "  API: http://127.0.0.1:${PROXY_PORT}"
+        echo "  GUI: http://127.0.0.1:${PROXY_PORT}/app/"
     else
-        warning "Proxy: Not running"
-    fi
-    
-    # Check GUI
-    if is_port_in_use $GUI_PORT; then
-        success "GUI: Running on port $GUI_PORT"
-        echo "  PIDs: $(lsof -ti :$GUI_PORT | tr '\n' ' ')"
-    else
-        warning "GUI: Not running"
+        warning "Proxy Server: Not running"
     fi
     
     # Check for stray processes
@@ -359,11 +352,8 @@ cmd_logs() {
     
     echo "Showing recent logs..."
     echo ""
-    echo "=== PROXY LOGS ==="
-    tail -n 20 "${LOG_DIR}/proxy.log" 2>/dev/null || echo "No proxy logs"
-    echo ""
-    echo "=== GUI LOGS ==="
-    tail -n 20 "${LOG_DIR}/gui.log" 2>/dev/null || echo "No GUI logs"
+    echo "=== PROXY SERVER LOGS (includes API and GUI) ==="
+    tail -n 30 "${LOG_DIR}/proxy.log" 2>/dev/null || echo "No proxy logs"
 }
 
 # ============================================================================

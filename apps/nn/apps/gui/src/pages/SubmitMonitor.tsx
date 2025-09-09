@@ -165,13 +165,22 @@ export function SubmitMonitor({ onNext, onBack, toast }: SubmitMonitorProps) {
     }
   }, [])
 
+  // Helper functions to map UI provider names to different API enum values
+  const mapProviderToPreflight = (uiProvider: 'batch' | 'vertex'): 'gemini-batch' | 'vertex-ai' => {
+    return uiProvider === 'batch' ? 'gemini-batch' : 'vertex-ai'
+  }
+  
+  const mapProviderToSubmit = (uiProvider: 'batch' | 'vertex'): 'batch' | 'vertex' => {
+    return uiProvider // Submit API uses the same values as UI
+  }
+
   // Handlers
   const handlePreflight = useCallback(() => {
     setJobState({ status: 'preflight' })
     preflightMutation.mutate({
       promptsPath,
       styleDir,
-      provider,
+      provider: mapProviderToPreflight(provider),
       variants,
     })
   }, [promptsPath, styleDir, provider, variants, preflightMutation])
@@ -182,7 +191,7 @@ export function SubmitMonitor({ onNext, onBack, toast }: SubmitMonitorProps) {
     submitMutation.mutate({
       promptsPath,
       styleDir,
-      provider,
+      provider: mapProviderToSubmit(provider),
       variants,
       runMode,
     })
