@@ -76,6 +76,7 @@
 ✅ **Completed**:
 - Batch-first architecture with proxy service
 - Gemini Batch API integration (default provider)
+- **In-memory job tracking**: Map-based storage for batch job lifecycle
 - Provider factory with unified interface (batch/vertex/mock)
 - Comprehensive batch limits and guardrails:
   - Cost estimation with warnings
@@ -83,6 +84,8 @@
   - Auto-compression and deduplication
   - CLI safety with --dry-run defaults
   - Style-only enforcement
+- **Mock batch functionality**: Since Gemini lacks true batch API
+- **Enhanced CORS**: Proxy self-origin support (ports 8787)
 - Smoke tests for batch operations (smoke.batch.spec.ts)
 - CI/CD with docker-compose and GitHub Actions
 - Environment configuration with batch defaults
@@ -93,6 +96,7 @@
 - Idempotency helpers (SHA256)
 - Image analysis with Sharp
 - CLI with batch commands
+- **Provider mapping helpers**: UI to API provider name translation
 
 ⏳ **Pending**:
 - GUI with Fastify + React
@@ -116,7 +120,7 @@ apps/nn/
 │   │   └── dedupe.ts      # ⏳ SimHash duplicate detection
 │   ├── adapters/
 │   │   ├── providerFactory.ts # ✅ Unified provider interface
-│   │   ├── geminiBatch.ts # ✅ Gemini Batch API client (default)
+│   │   ├── geminiBatch.ts # ✅ Batch client with in-memory job tracking
 │   │   ├── batchRelayClient.ts # ✅ Proxy client
 │   │   ├── geminiImage.ts # ✅ Vertex AI fallback
 │   │   └── fs-manifest.ts # ✅ File operations
@@ -124,6 +128,10 @@ apps/nn/
 │   │   └── preflight.ts   # ✅ Size limits and validation
 │   └── types/             # ✅ Reference pack schemas
 ├── proxy/                 # ✅ Batch relay proxy service
+│   └── src/
+│       ├── server.ts      # ✅ Enhanced CORS configuration
+│       └── clients/
+│           └── geminiBatch.ts # ✅ In-memory Map storage for jobs
 ├── test/
 │   └── smoke.batch.spec.ts # ✅ Batch integration tests
 ├── .github/workflows/ci.yml # ✅ CI/CD pipeline
@@ -222,6 +230,48 @@ cd apps/nn/apps/gui && pnpm dev
 
 # Verify
 curl http://127.0.0.1:8787/healthz  # Should return {"status":"ok"}
+```
+
+## Batch Processing Implementation
+
+### Architecture Overview
+Since Gemini doesn't provide a true batch API, we've implemented a mock batch system:
+
+1. **In-Memory Job Storage**: Uses a Map to track job status and results
+2. **Job Lifecycle**: submit → poll (status) → fetch (results)
+3. **Status Tracking**: Jobs transition through states (processing → completed)
+4. **Result Storage**: Base64 data URLs stored directly in memory
+
+### Key Components
+```typescript
+// In-memory storage structure (geminiBatch.ts)
+const jobs = new Map<string, {
+  status: "processing" | "completed" | "failed";
+  completed: number;
+  total: number;
+  results: Array<{ id: string; prompt: string; outUrl?: string }>;
+  problems: any[];
+}>();
+```
+
+### Batch API Endpoints
+- `POST /batch/submit` - Submit new batch job
+- `GET /batch/job-{id}/poll` - Check job status
+- `GET /batch/job-{id}/results` - Fetch completed results
+
+### Image Extraction Workflow
+```bash
+# 1. Submit batch job
+curl -X POST http://127.0.0.1:8787/batch/submit -d '{...}'
+
+# 2. Poll for completion
+curl http://127.0.0.1:8787/batch/job-{id}/poll
+
+# 3. Extract results (base64 image)
+curl -s http://127.0.0.1:8787/batch/job-{id}/results | \
+  jq -r '.results[0].outUrl' | \
+  sed 's/^data:image\/[^;]*;base64,//' | \
+  base64 -d > image.png
 ```
 
 ## Recent Fixes (2025-09-08)
@@ -401,6 +451,24 @@ pnpm test:e2e     # End-to-end tests
 
 ### Issue: Slow analysis
 **Fix**: Reduce image size for palette extraction
+
+### Issue: "Could not process image" error in Claude
+**Cause**: Truncating base64 image data (e.g., using `head -c 50`)
+**Fix**: Extract and decode complete base64 data:
+```bash
+# Correct way to extract generated images:
+curl -s "http://127.0.0.1:8787/batch/job-[JOB_ID]/results" | \
+  jq -r '.results[0].outUrl' | \
+  sed 's/^data:image\/[^;]*;base64,//' | \
+  base64 -d > generated_image.png
+```
+
+### Issue: Batch job status 404
+**Cause**: Job doesn't exist in memory or has expired
+**Fix**: Jobs are stored in-memory only; restart clears all jobs
+
+### Issue: CORS errors on proxy requests
+**Fix**: Proxy now allows self-origin requests (ports 8787)
 
 ## Special Instructions
 

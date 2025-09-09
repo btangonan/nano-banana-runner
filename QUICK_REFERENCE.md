@@ -5,7 +5,9 @@
 **Proxy**: ✅ Working (batch routes registered, health checks)  
 **Toast Fix**: ✅ Resolved (lucide-react icons updated)  
 **Batch Routes**: ✅ Fixed (fastify-plugin removed)  
-**Startup Script**: ✅ Created (bulletproof process management)
+**Startup Script**: ✅ Created (bulletproof process management)  
+**Batch Processing**: ✅ In-memory job tracking implemented  
+**CORS**: ✅ Enhanced to support proxy self-origin requests
 
 ## Starting the Application
 
@@ -82,7 +84,7 @@ pnpm build           # Build for production
 pnpm preview         # Preview production build
 ```
 
-## CLI Commands (When Implemented)
+## CLI Commands
 
 ```bash
 # Core workflow
@@ -94,6 +96,12 @@ nn gui                # Launch web interface
 # Batch operations
 nn batch poll --job <id> [--watch]
 nn batch fetch --job <id> [--out <dir>]
+
+# Extract generated images from batch results
+curl -s "http://127.0.0.1:8787/batch/job-[JOB_ID]/results" | \
+  jq -r '.results[0].outUrl' | \
+  sed 's/^data:image\/[^;]*;base64,//' | \
+  base64 -d > generated_image.png
 
 # CSV operations
 nn prompts export --in <jsonl> --out <csv>
@@ -216,4 +224,4 @@ git branch  # Should show feature/*, not main
 ```
 
 ---
-Updated: 2025-09-08 | All systems operational
+Updated: 2025-09-09 | All systems operational with batch processing

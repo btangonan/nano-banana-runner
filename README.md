@@ -6,12 +6,14 @@ Terminal image analyzer → prompt remixer → Gemini image generator with style
 
 - 🖼️ **Image Analysis**: Extract metadata, palette, and attributes from images
 - 🎨 **Prompt Remixing**: Generate variations with deterministic control
-- 🤖 **Gemini Batch API**: Secure proxy-based image generation via Gemini Batch (primary)
+- 🤖 **Mock Batch Processing**: In-memory job tracking for Gemini image generation
 - 🔄 **Vertex AI Fallback**: Direct Vertex API for sync operations when needed
 - 🎯 **Style-Only Conditioning**: Preserve style without copying composition
 - 📊 **CSV Export/Import**: Round-trip prompt editing
 - 🔍 **Duplicate Detection**: Find near-duplicates with SimHash
 - 🖥️ **Local GUI**: Review and QC prompts before rendering
+- 💾 **In-Memory Job Storage**: Track batch jobs with complete lifecycle management
+- 🔐 **Enhanced CORS**: Support for proxy self-origin requests
 
 ## Quick Start
 
@@ -221,6 +223,25 @@ NN_STYLE_GUARD_ENABLED=true # Style-only conditioning enforcement
 NN_ENABLE_CACHE=true        # Response caching
 PREFLIGHT_COMPRESS=true     # Reference image compression
 PREFLIGHT_SPLIT=true        # Auto-split large jobs
+```
+
+## Batch Processing Implementation
+
+Since Gemini doesn't provide a true batch API, we implement a mock batch system with in-memory job tracking:
+
+### Architecture
+- **In-Memory Storage**: Jobs stored in a Map with complete lifecycle tracking
+- **Job States**: `processing` → `completed` (or `failed`)
+- **Result Format**: Base64 data URLs for generated images
+- **CORS Support**: Proxy allows self-origin requests (ports 8787)
+
+### Extracting Generated Images
+```bash
+# Extract base64 image from batch results
+curl -s "http://127.0.0.1:8787/batch/job-[JOB_ID]/results" | \
+  jq -r '.results[0].outUrl' | \
+  sed 's/^data:image\/[^;]*;base64,//' | \
+  base64 -d > generated_image.png
 ```
 
 ## Proxy Service
