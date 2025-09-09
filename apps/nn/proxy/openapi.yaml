@@ -1,0 +1,321 @@
+openapi: 3.0.3
+info:
+  title: Nano Banana Runner Proxy API
+  description: Batch relay proxy for Gemini image generation
+  version: 1.0.0
+  contact:
+    name: Nano Banana Team
+servers:
+  - url: http://127.0.0.1:8787
+    description: Local development server
+paths:
+  /healthz:
+    get:
+      summary: Health check endpoint
+      description: Returns service health status
+      tags:
+        - System
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+                  timestamp:
+                    type: string
+                    format: date-time
+  
+  /metrics:
+    get:
+      summary: Metrics endpoint
+      description: Returns service metrics and performance data
+      tags:
+        - System
+      responses:
+        '200':
+          description: Metrics summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  uptime:
+                    type: integer
+                    description: Uptime in seconds
+                  requests:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      byRoute:
+                        type: object
+                  errors:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      byType:
+                        type: object
+                  responseTimes:
+                    type: object
+                  errorRate:
+                    type: number
+  
+  /batch/submit:
+    post:
+      summary: Submit batch job
+      description: Submit a batch image generation job
+      tags:
+        - Batch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - prompts
+                - refs
+              properties:
+                prompts:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      text:
+                        type: string
+                      id:
+                        type: string
+                refs:
+                  type: array
+                  items:
+                    type: object
+                provider:
+                  type: string
+                  enum: [batch, vertex, mock]
+                  default: batch
+                dryRun:
+                  type: boolean
+                  default: false
+      responses:
+        '200':
+          description: Job submitted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId:
+                    type: string
+                  status:
+                    type: string
+                  estimatedCost:
+                    type: number
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  
+  /ui/preflight:
+    post:
+      summary: Preflight check
+      description: Validate job before submission
+      tags:
+        - UI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prompts:
+                  type: array
+                  items:
+                    type: object
+                refs:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '200':
+          description: Preflight check results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  issues:
+                    type: array
+                    items:
+                      type: string
+                  stats:
+                    type: object
+                    properties:
+                      promptCount:
+                        type: integer
+                      refCount:
+                        type: integer
+                      estimatedSize:
+                        type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  
+  /ui/poll:
+    get:
+      summary: Poll job status
+      description: Check the status of a submitted job
+      tags:
+        - UI
+      parameters:
+        - name: jobId
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Job ID to poll
+      responses:
+        '200':
+          description: Job status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId:
+                    type: string
+                  status:
+                    type: string
+                    enum: [pending, processing, succeeded, failed]
+                  progress:
+                    type: number
+                    minimum: 0
+                    maximum: 100
+                  completedAt:
+                    type: string
+                    format: date-time
+        '404':
+          $ref: '#/components/responses/NotFound'
+  
+  /ui/fetch:
+    get:
+      summary: Fetch job results
+      description: Download completed job results
+      tags:
+        - UI
+      parameters:
+        - name: jobId
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Job ID to fetch results for
+      responses:
+        '200':
+          description: Job results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId:
+                    type: string
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        promptId:
+                          type: string
+                        imageUrl:
+                          type: string
+                        imageData:
+                          type: string
+                          format: base64
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    
+    NotFound:
+      description: Resource not found
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    
+    RateLimited:
+      description: Rate limit exceeded
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+          description: Request limit per window
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+          description: Remaining requests in window
+        X-RateLimit-Reset:
+          schema:
+            type: string
+            format: date-time
+          description: Time when limit resets
+    
+    InternalError:
+      description: Internal server error
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  
+  schemas:
+    Problem:
+      type: object
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          description: Problem type URI
+        title:
+          type: string
+          description: Short human-readable summary
+        status:
+          type: integer
+          description: HTTP status code
+        detail:
+          type: string
+          description: Detailed explanation
+        instance:
+          type: string
+          description: URI of this specific occurrence
+
+tags:
+  - name: System
+    description: System health and monitoring
+  - name: Batch
+    description: Batch job operations
+  - name: UI
+    description: UI-specific endpoints

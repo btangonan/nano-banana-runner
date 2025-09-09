@@ -2,8 +2,11 @@ import "dotenv/config";
 import fastify from "fastify";
 import sensible from "@fastify/sensible";
 import multipart from "@fastify/multipart";
+import rateLimit from "@fastify/rate-limit";
+import cors from "@fastify/cors";
 import { loadEnv } from "./config/env.js";
 import { log } from "./logger.js";
+import { metrics, registerMetrics } from "./metrics.js";
 import batchRoutes from "./routes/batch.js";
 import staticRoutes from "./routes/ui.static.js";
 import uploadRoutes from "./routes/ui.upload.js";
@@ -35,12 +38,84 @@ async function main() {
   
   // Register plugins
   await app.register(sensible);
+  
+  // Configure rate limiting
+  if (env.RATE_LIMIT_ENABLED) {
+    await app.register(rateLimit, {
+      global: true,
+      max: env.RATE_LIMIT_GLOBAL_MAX,
+      timeWindow: '1 minute',
+      hook: 'preHandler',
+      skipOnError: false,
+      keyGenerator: (req) => {
+        // Use X-Forwarded-For if behind proxy, otherwise use IP
+        return req.headers['x-forwarded-for'] as string || req.ip;
+      },
+      errorResponseBuilder: (req, context) => ({
+        type: 'about:blank',
+        title: 'Too Many Requests',
+        status: 429,
+        detail: `Rate limit exceeded. Max ${context.max} requests per ${context.after}`,
+        instance: req.url
+      })
+    });
+    
+    // Route-specific limits for batch operations
+    app.addHook('onRoute', (routeOptions) => {
+      if (routeOptions.url === '/batch/submit') {
+        routeOptions.config = {
+          ...routeOptions.config,
+          rateLimit: {
+            max: env.RATE_LIMIT_BATCH_MAX,
+            timeWindow: '5 minutes'
+          }
+        };
+      }
+      // Exempt health check from rate limiting
+      if (routeOptions.url === '/healthz') {
+        routeOptions.config = {
+          ...routeOptions.config,
+          rateLimit: false
+        };
+      }
+    });
+  }
+  
   await app.register(multipart, {
     limits: {
       fileSize: 15 * 1024 * 1024, // 15MB max per file
       files: 500, // max 500 files per request
     }
   });
+  
+  // Configure CORS
+  const allowedOrigins = env.ALLOWED_ORIGINS 
+    ? env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+    : ['http://localhost:5174', 'http://127.0.0.1:5174']; // Default to local dev
+    
+  await app.register(cors, {
+    origin: (origin, cb) => {
+      // Allow requests with no origin (e.g., mobile apps, Postman)
+      if (!origin) return cb(null, true);
+      
+      // Check if origin is in allowed list
+      if (allowedOrigins.includes(origin)) {
+        cb(null, true);
+      } else {
+        cb(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
+    exposedHeaders: ['X-Request-ID', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
+    maxAge: 86400, // 24 hours
+    preflightContinue: false,
+    optionsSuccessStatus: 204
+  });
+  
+  // Register metrics collection
+  registerMetrics(app, metrics);
   
   // Register routes
   await app.register(batchRoutes);
