@@ -162,7 +162,7 @@ export class GeminiBatchClient {
     }
   }
 
-  // Generate a single image using the OpenAI-compatible Gemini API
+  // Generate a single image using Gemini 2.5 Flash image generation model
   private async generateSingleImage(
     row: { prompt: string; sourceImage?: string; seed?: number; tags?: string[] },
     styleRefs: Array<{ mimeType: string; data: string }>
@@ -170,24 +170,35 @@ export class GeminiBatchClient {
     // Create full prompt with style conditioning
     let fullPrompt = `Use reference images strictly for style, palette, texture, and mood. Do NOT copy subject geometry, pose, or layout.\n\n${row.prompt}`;
     
-    // For now, we can't easily include reference images in the OpenAI-compatible endpoint
-    // so we'll add style description to the text prompt
+    // Build parts array for Gemini API
+    const parts: any[] = [
+      { text: fullPrompt }
+    ];
+    
+    // Add reference images as inline data if available
     if (styleRefs.length > 0) {
-      fullPrompt += `\n\nStyle note: Apply artistic style and mood similar to reference images provided.`;
+      for (const ref of styleRefs) {
+        parts.push({
+          inline_data: {
+            mime_type: ref.mimeType,
+            data: ref.data
+          }
+        });
+      }
+      parts.push({ text: "\n\nApply the artistic style and mood from the reference images above to the generated image." });
     }
 
     const requestBody = {
-      model: "imagen-3.0-generate-002",
-      prompt: fullPrompt,
-      response_format: "b64_json",
-      n: 1
+      contents: [{
+        parts: parts
+      }]
     };
 
-    const r = await request("https://generativelanguage.googleapis.com/v1beta/openai/images/generations", {
+    const r = await request("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent", {
       method: "POST",
       headers: { 
         "Content-Type": "application/json", 
-        "Authorization": `Bearer ${this.apiKey}`
+        "x-goog-api-key": this.apiKey
       },
       body: JSON.stringify(requestBody)
     });
@@ -199,12 +210,13 @@ export class GeminiBatchClient {
     
     const body = await r.body.json() as any;
     
-    // Extract base64 image data from OpenAI-compatible response
-    const data = body.data?.[0];
+    // Extract base64 image data from Gemini response
+    const candidate = body.candidates?.[0];
+    const imagePart = candidate?.content?.parts?.find((part: any) => part.inlineData);
     
-    if (data?.b64_json) {
+    if (imagePart?.inlineData?.data) {
       return {
-        outUrl: `data:image/png;base64,${data.b64_json}`
+        outUrl: `data:image/png;base64,${imagePart.inlineData.data}`
       };
     }
     
