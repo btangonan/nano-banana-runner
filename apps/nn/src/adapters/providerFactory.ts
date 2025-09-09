@@ -10,8 +10,48 @@ import { createOperationLogger } from '../logger.js';
 import { GeminiBatchAdapter } from './geminiBatch.js';
 import { GeminiImageAdapter } from './geminiImage.js';
 import { MockImageAdapter } from './mockImage.js';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
 const log = createOperationLogger('ProviderFactory');
+
+interface ProbeCache {
+  timestamp: string;
+  project: string;
+  location: string;
+  results: Array<{
+    model: string;
+    status: 'healthy' | 'degraded' | 'error';
+    http: number;
+    code?: string;
+  }>;
+}
+
+/**
+ * Read probe cache if available
+ */
+async function readProbeCache(): Promise<ProbeCache | null> {
+  const cachePath = join(env.NN_OUT_DIR, 'artifacts', 'probe', 'publishers.json');
+  try {
+    const content = await readFile(cachePath, 'utf-8');
+    return JSON.parse(content);
+  } catch (error) {
+    log.debug({ cachePath }, 'No probe cache found');
+    return null;
+  }
+}
+
+/**
+ * Check if a model is healthy based on probe cache
+ */
+function isModelHealthy(cache: ProbeCache | null, modelName: string): boolean {
+  if (!cache) return true; // No cache means assume healthy
+  
+  const result = cache.results.find(r => r.model === modelName);
+  if (!result) return true; // Model not in cache, assume healthy
+  
+  return result.status === 'healthy';
+}
 
 /**
  * Unified provider interface that abstracts async/sync differences
@@ -137,13 +177,23 @@ class SyncProviderWrapper implements UnifiedProvider {
 
 /**
  * Provider factory - creates unified provider based on configuration with per-job override support
- * Priority: per-job override → env default → batch (fallback)
+ * Priority: per-job override → env default → batch (default)
+ * Auto-fallback: Vertex unavailable → Batch (unless noFallback is true)
+ * Model health gating: Uses probe cache to gate unhealthy models
+ * DEFAULT: Batch provider unless explicitly set to vertex
  */
-export function createProvider(providerOverride?: ProviderName): UnifiedProvider {
+export async function createProvider(providerOverride?: ProviderName, noFallback?: boolean): Promise<UnifiedProvider> {
+  // Default to 'batch' unless explicitly set to 'vertex'
   const defaultProvider = (env.NN_PROVIDER === 'vertex' ? 'vertex' : 'batch') as ProviderName;
   const chosen = providerOverride ?? defaultProvider;
   
-  log.info({ chosen, defaultProvider, override: providerOverride }, 'Creating provider with override support');
+  log.info({ 
+    chosen, 
+    defaultProvider, 
+    override: providerOverride, 
+    noFallback,
+    provider: chosen  // Always log the actual provider being used
+  }, 'Creating provider with override support');
   
   switch (chosen) {
     case 'batch':
@@ -152,15 +202,120 @@ export function createProvider(providerOverride?: ProviderName): UnifiedProvider
       
     case 'vertex':
       if (!env.GOOGLE_CLOUD_PROJECT) {
-        const err: any = {
-          type: 'about:blank',
-          title: 'Vertex provider requires ADC configuration',
-          detail: 'GOOGLE_CLOUD_PROJECT is required for vertex provider. Configure ADC or use --provider batch',
-          status: 400
-        };
-        throw Object.assign(new Error(err.detail), err);
+        if (noFallback) {
+          const err: any = {
+            type: 'about:blank',
+            title: 'Vertex AI configuration missing',
+            detail: 'GOOGLE_CLOUD_PROJECT is required for Vertex AI provider',
+            status: 400
+          };
+          throw Object.assign(new Error(err.detail), err);
+        }
+        log.warn({ 
+          reason: 'missing_project_config',
+          fallback: 'batch' 
+        }, 'Vertex requires GOOGLE_CLOUD_PROJECT, falling back to batch');
+        return new BatchProviderWrapper(new GeminiBatchAdapter());
       }
-      log.info('Using Vertex AI (sync fallback) provider');
+      
+      // Check probe cache for model health
+      const cache = await readProbeCache();
+      const primaryModel = 'gemini-1.5-flash'; // Primary model to check
+      
+      // Check if primary model is healthy based on probe cache
+      if (cache && !isModelHealthy(cache, primaryModel)) {
+        log.warn({ 
+          model: primaryModel, 
+          cache: cache.timestamp 
+        }, 'Primary model marked unhealthy in probe cache');
+        
+        if (noFallback) {
+          const modelResult = cache.results.find(r => r.model === primaryModel);
+          const err: any = {
+            type: 'about:blank',
+            title: 'Model entitlement missing',
+            detail: `Publisher Model ${primaryModel} is not available (status: ${modelResult?.status}, HTTP: ${modelResult?.http})`,
+            status: 403,
+            instance: modelResult?.model,
+            extensions: {
+              probeTimestamp: cache.timestamp,
+              modelStatus: modelResult?.status,
+              httpCode: modelResult?.http
+            }
+          };
+          throw Object.assign(new Error(err.detail), err);
+        }
+        
+        log.info({ 
+          reason: 'model_unhealthy',
+          model: primaryModel,
+          fallback: 'batch' 
+        }, 'Auto-fallback to Batch provider due to unhealthy model');
+        return new BatchProviderWrapper(new GeminiBatchAdapter());
+      }
+      
+      // Create Vertex adapter and probe availability
+      const vertexAdapter = new GeminiImageAdapter({
+        project: env.GOOGLE_CLOUD_PROJECT,
+        location: env.GOOGLE_CLOUD_LOCATION
+      });
+      
+      // Probe Vertex availability with automatic fallback
+      log.info('Probing Vertex AI availability');
+      const isAvailable = await vertexAdapter.probe();
+      
+      if (isAvailable) {
+        log.info('Using Vertex AI (sync) provider - probe successful');
+        return new SyncProviderWrapper(vertexAdapter);
+      } else {
+        if (noFallback) {
+          const err: any = {
+            type: 'about:blank',
+            title: 'Vertex AI unavailable',
+            detail: 'Vertex AI probe failed - entitlement or authentication issue',
+            status: 503
+          };
+          throw Object.assign(new Error(err.detail), err);
+        }
+        log.warn({ 
+          reason: 'vertex_probe_failed',
+          fallback: 'batch' 
+        }, 'Vertex AI unavailable (entitlement/auth issue), falling back to Batch provider');
+        return new BatchProviderWrapper(new GeminiBatchAdapter());
+      }
+      
+    default:
+      const err: any = {
+        type: 'about:blank',
+        title: 'Unknown provider',
+        detail: `provider=${String(chosen)}. Must be 'batch' or 'vertex'`,
+        status: 400
+      };
+      throw Object.assign(new Error(err.detail), err);
+  }
+}
+
+/**
+ * Synchronous provider factory for backwards compatibility
+ * Warning: Does not probe Vertex availability
+ */
+export function createProviderSync(providerOverride?: ProviderName): UnifiedProvider {
+  const defaultProvider = (env.NN_PROVIDER === 'vertex' ? 'vertex' : 'batch') as ProviderName;
+  const chosen = providerOverride ?? defaultProvider;
+  
+  log.info({ chosen, defaultProvider, override: providerOverride }, 'Creating provider (sync, no probe)');
+  
+  switch (chosen) {
+    case 'batch':
+      log.info('Using Gemini Batch (async) provider');
+      return new BatchProviderWrapper(new GeminiBatchAdapter());
+      
+    case 'vertex':
+      if (!env.GOOGLE_CLOUD_PROJECT) {
+        log.warn('Vertex requires GOOGLE_CLOUD_PROJECT, falling back to batch');
+        return new BatchProviderWrapper(new GeminiBatchAdapter());
+      }
+      log.info('Using Vertex AI (sync) provider - no probe');
       return new SyncProviderWrapper(new GeminiImageAdapter({
         project: env.GOOGLE_CLOUD_PROJECT,
         location: env.GOOGLE_CLOUD_LOCATION
@@ -193,6 +348,7 @@ export function isDirectResult(result: GenerateResult): result is { type: 'direc
 
 /**
  * Convenience function for workflows - handles provider selection automatically with override support
+ * Includes automatic probe and fallback for Vertex
  */
 export async function generateImages(req: {
   rows: PromptRow[];
@@ -201,7 +357,8 @@ export async function generateImages(req: {
   styleRefs: string[];
   runMode: 'dry_run' | 'live';
   provider?: ProviderName;  // per-job override
+  noFallback?: boolean;     // prevent automatic fallback
 }): Promise<GenerateResult> {
-  const provider = createProvider(req.provider);
+  const provider = await createProvider(req.provider, req.noFallback);
   return provider.generate(req);
 }

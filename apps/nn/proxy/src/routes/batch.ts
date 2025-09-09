@@ -1,6 +1,5 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
-import fp from "fastify-plugin";
 import { GeminiBatchClient } from "../clients/geminiBatch.js";
 
 const SubmitSchema = z.object({
@@ -16,7 +15,7 @@ const SubmitSchema = z.object({
   styleRefs: z.array(z.string())
 }).strict();
 
-export default fp(async function batchRoutes(app: FastifyInstance) {
+export default async function batchRoutes(app: FastifyInstance) {
   const apiKey = app.config.GEMINI_BATCH_API_KEY;
   
   if (!apiKey && app.config.NODE_ENV !== "development") {
@@ -114,4 +113,6 @@ export default fp(async function batchRoutes(app: FastifyInstance) {
     timestamp: new Date().toISOString(),
     apiKeyConfigured: !!apiKey
   }));
-});
+  
+  app.log.info("Batch routes registered at /batch/*");
+}

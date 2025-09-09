@@ -155,18 +155,18 @@ export function RemixReview({ onNext, onBack, toast }: RemixReviewProps) {
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Remix & Review</h1>
-          <p className="text-gray-600">Generate prompts from analysis and review before rendering</p>
-        </div>
-        <div className="space-x-2">
-          <Button variant="outline" onClick={onBack}>
-            Back
+        <div className="flex items-center gap-4">
+          <Button variant="outline" size="sm" onClick={onBack}>
+            ← Back
           </Button>
-          <Button onClick={onNext} disabled={prompts.length === 0}>
-            Next: Render
-          </Button>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Remix & Review</h1>
+            <p className="text-gray-600">Generate prompts from analysis and review before rendering</p>
+          </div>
         </div>
+        <Button onClick={onNext} disabled={prompts.length === 0}>
+          Next: Render →
+        </Button>
       </div>
 
       {/* Remix Configuration */}

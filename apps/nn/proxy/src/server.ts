@@ -18,6 +18,7 @@ import fetchRoutes from "./routes/ui.fetch.js";
 declare module "fastify" {
   interface FastifyInstance {
     config: import("./config/env.js").Env;
+    jobs: Map<string, any>;
   }
 }
 
@@ -27,6 +28,10 @@ async function main() {
   
   // Attach config for plugins
   app.decorate("config", env);
+  
+  // Initialize jobs Map for tracking async operations
+  const jobs = new Map<string, any>();
+  app.decorate("jobs", jobs);
   
   // Register plugins
   await app.register(sensible);

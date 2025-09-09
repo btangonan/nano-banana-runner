@@ -177,6 +177,54 @@ Options:
 - `NN_PRICE_PER_IMAGE_USD`: Cost per image for estimation
 - `NN_STYLE_GUARD_ENABLED`: Enable/disable style guard (default: true)
 
+## Provider Switching
+
+### Default Provider: Batch
+The application defaults to **Gemini Batch** provider for all operations unless explicitly configured otherwise. This ensures cost-effective batch processing and prevents accidental Vertex AI usage.
+
+### Provider Selection Priority
+1. **Command-line flag**: `--provider vertex` (per-command override)
+2. **Environment variable**: `NN_PROVIDER=vertex` (session default)
+3. **Default**: `batch` (when neither flag nor env is set)
+
+### Switching to Batch (Default)
+```bash
+# Option 1: Use default (no configuration needed)
+nn render --dry-run  # Uses batch by default
+
+# Option 2: Explicit environment variable
+export NN_PROVIDER=batch
+nn render --dry-run
+
+# Option 3: Create .env file for persistence
+echo "NN_PROVIDER=batch" > .env
+```
+
+### Switching to Vertex AI
+```bash
+# Option 1: Per-command override
+nn render --provider vertex --dry-run
+
+# Option 2: Session-wide
+export NN_PROVIDER=vertex
+nn render --dry-run
+```
+
+### Automatic Fallback
+When Vertex AI is requested but unavailable (missing credentials, entitlement issues, or probe failures), the system automatically falls back to Batch provider with a warning log:
+- `reason: missing_project_config` - GOOGLE_CLOUD_PROJECT not set
+- `reason: model_unhealthy` - Model marked unhealthy in probe cache
+- `reason: vertex_probe_failed` - Vertex AI probe failed
+
+### Verify Current Provider
+```bash
+# Run smoke test to verify Batch is active
+./scripts/smoke_batch.sh
+
+# Check logs for provider confirmation
+nn render --dry-run 2>&1 | grep -i "provider\|batch\|vertex"
+```
+
 ## Safety Features
 
 ### Probe Requirement

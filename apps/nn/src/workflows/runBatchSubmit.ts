@@ -165,7 +165,7 @@ export async function runBatchSubmit(opts: BatchSubmitOptions): Promise<void> {
     }
     
     // Create provider with override support
-    const provider = createProvider(opts.provider);
+    const provider = await createProvider(opts.provider);
     
     // Submit job using provider factory
     const result = await provider.generate({

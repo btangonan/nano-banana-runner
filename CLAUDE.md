@@ -3,9 +3,9 @@
 ## Quick Reference
 **Project**: Nano Banana Runner (nn) - Image analyzer → prompt remixer → Gemini generator  
 **Location**: `/Users/bradleytangonan/Desktop/my apps/gemini image analyzer/`  
-**Stack**: TypeScript, Node 20, Gemini Batch API, Fastify, React, Zod  
-**Architecture**: Batch-first with proxy service, Vertex AI fallback  
-**Status**: ✅ Batch-first implementation complete with guardrails
+**Stack**: TypeScript, Node 20, Gemini Batch API, Vertex AI SDK, Fastify, React, Zod  
+**Provider System**: Batch (primary/default) with Vertex (fallback) - Provider switching implemented  
+**Status**: Core modules implemented, Batch provider working, Vertex has entitlement issues
 
 ## Active SuperClaude Commands
 
@@ -182,6 +182,69 @@ PREFLIGHT_SPLIT=true
 - RFC 7807 Problem+JSON
 - Exponential backoff with jitter
 - Dry-run by default
+
+## Starting the Application
+
+### Bulletproof Startup (Recommended)
+```bash
+# Clean start with automatic process cleanup
+./start-clean.sh
+
+# Options:
+./start-clean.sh --clear-cache  # Clear Vite cache too
+./start-clean.sh stop           # Stop all services
+./start-clean.sh restart        # Full restart
+./start-clean.sh status         # Check what's running
+./start-clean.sh cleanup        # Aggressive cleanup
+./start-clean.sh logs           # View recent logs
+```
+
+**What it does:**
+- Kills ALL processes on ports 8787, 5174, 24678
+- Clears Vite cache and temp files (with --clear-cache)
+- Starts proxy first, then GUI
+- Verifies health checks
+- Tracks PIDs for clean shutdown
+- Logs to `./logs/` directory
+
+### Manual Start (If Script Fails)
+```bash
+# Kill old processes first
+pkill -f "pnpm.*dev" || true
+lsof -ti :8787 | xargs kill -9 2>/dev/null || true
+lsof -ti :5174 | xargs kill -9 2>/dev/null || true
+
+# Start proxy
+cd apps/nn/proxy && pnpm dev
+
+# Start GUI (new terminal)
+cd apps/nn/apps/gui && pnpm dev
+
+# Verify
+curl http://127.0.0.1:8787/healthz  # Should return {"status":"ok"}
+```
+
+## Recent Fixes (2025-09-08)
+
+### Toast Component Crash (RESOLVED)
+**Issue**: React "Element type is invalid...got: undefined"
+**Cause**: lucide-react v0.445.0 renamed icons
+**Fix**: Updated icon imports and separated hook
+```typescript
+// Fixed imports:
+import { CircleCheck, TriangleAlert } from "lucide-react"
+// Was: CheckCircle, AlertTriangle
+```
+
+### Batch Routes 404 (RESOLVED)
+**Issue**: "relay submit 500: submit failed 404"
+**Cause**: fastify-plugin wrapper prevented registration
+**Fix**: Removed wrapper from batch.ts
+```typescript
+// Fixed:
+export default async function batchRoutes(app: FastifyInstance) {
+// Was: export default fp(async function...)
+```
 
 ## Common Operations
 

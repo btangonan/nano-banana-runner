@@ -47,6 +47,48 @@ pnpm nn batch submit --prompts ./artifacts/prompts.jsonl --style-dir ./images --
 pnpm nn gui
 ```
 
+## Starting the Application
+
+### Using the Startup Script (Recommended)
+
+A bulletproof startup script ensures clean launches by killing stale processes, clearing caches, and verifying services:
+
+```bash
+# Start all services with automatic cleanup
+./start-clean.sh
+
+# Start with cache clearing
+./start-clean.sh --clear-cache
+
+# Other commands
+./start-clean.sh stop      # Stop all services
+./start-clean.sh restart   # Restart services
+./start-clean.sh status    # Check service status
+./start-clean.sh cleanup   # Aggressive cleanup
+./start-clean.sh logs      # View recent logs
+```
+
+The script handles:
+- Killing processes on ports 8787 (proxy), 5174 (GUI), 24678 (Vite HMR)
+- Health checks and batch route verification
+- PID tracking for clean shutdowns
+- Automatic log rotation
+
+### Manual Start
+
+```bash
+# Terminal 1: Start proxy server
+cd apps/nn/proxy
+pnpm dev
+
+# Terminal 2: Start GUI server
+cd apps/nn/apps/gui
+pnpm dev
+
+# Access the application
+open http://localhost:5174/app/
+```
+
 ## CLI Commands
 
 ### Core Commands

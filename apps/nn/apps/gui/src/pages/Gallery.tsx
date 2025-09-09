@@ -170,9 +170,14 @@ export function Gallery({ onNext, onBack, toast }: GalleryProps) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold">Gallery</h1>
-            <p className="text-muted-foreground">Generated images</p>
+          <div className="flex items-center gap-4">
+            <Button variant="outline" size="sm" onClick={onBack}>
+              ← Back
+            </Button>
+            <div>
+              <h1 className="text-2xl font-semibold">Gallery</h1>
+              <p className="text-muted-foreground">Generated images</p>
+            </div>
           </div>
         </div>
 
@@ -183,15 +188,10 @@ export function Gallery({ onNext, onBack, toast }: GalleryProps) {
             <p className="text-muted-foreground mb-4">
               {error instanceof ApiError ? error.detail : 'Could not load the image gallery'}
             </p>
-            <div className="flex gap-2 justify-center">
-              <Button variant="outline" onClick={onBack}>
-                Back
-              </Button>
-              <Button onClick={() => refetch()} className="flex items-center gap-2">
-                <RefreshCw className="w-4 h-4" />
-                Retry
-              </Button>
-            </div>
+            <Button onClick={() => refetch()} className="flex items-center gap-2">
+              <RefreshCw className="w-4 h-4" />
+              Retry
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -203,9 +203,14 @@ export function Gallery({ onNext, onBack, toast }: GalleryProps) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold">Gallery</h1>
-            <p className="text-muted-foreground">Loading generated images...</p>
+          <div className="flex items-center gap-4">
+            <Button variant="outline" size="sm" onClick={onBack}>
+              ← Back
+            </Button>
+            <div>
+              <h1 className="text-2xl font-semibold">Gallery</h1>
+              <p className="text-muted-foreground">Loading generated images...</p>
+            </div>
           </div>
         </div>
 
@@ -225,16 +230,21 @@ export function Gallery({ onNext, onBack, toast }: GalleryProps) {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Gallery</h1>
-          <p className="text-muted-foreground">
-            {data ? `${data.results.total} generated images` : 'Generated images'}
-            {jobId && (
-              <code className="ml-2 text-xs bg-muted px-2 py-1 rounded">
-                {jobId.slice(0, 8)}...
-              </code>
-            )}
-          </p>
+        <div className="flex items-center gap-4">
+          <Button variant="outline" size="sm" onClick={onBack}>
+            ← Back
+          </Button>
+          <div>
+            <h1 className="text-2xl font-semibold">Gallery</h1>
+            <p className="text-muted-foreground">
+              {data ? `${data.results.total} generated images` : 'Generated images'}
+              {jobId && (
+                <code className="ml-2 text-xs bg-muted px-2 py-1 rounded">
+                  {jobId.slice(0, 8)}...
+                </code>
+              )}
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -516,17 +526,13 @@ export function Gallery({ onNext, onBack, toast }: GalleryProps) {
       </Dialog>
 
       {/* Actions */}
-      <div className="flex justify-between">
-        <Button variant="outline" onClick={onBack}>
-          Back
-        </Button>
-        
-        {onNext && (
+      {onNext && (
+        <div className="flex justify-end">
           <Button onClick={onNext}>
-            Next
+            Next →
           </Button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

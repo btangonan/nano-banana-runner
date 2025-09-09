@@ -1,6 +1,7 @@
 import { VertexAI } from '@google-cloud/vertexai';
 import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { join } from 'node:path';
+import * as crypto from 'node:crypto';
 import type { 
   ImageGenProvider, 
   RenderRequest, 
@@ -24,6 +25,32 @@ import { tapRequestResponse } from '../lib/debugTap.js';
  */
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Save HTML error response for debugging
+ */
+async function saveHtmlErrorArtifact(content: string, errorType: string): Promise<string> {
+  const log = createOperationLogger('saveHtmlErrorArtifact');
+  const errorDir = join(env.NN_OUT_DIR, 'artifacts', 'errors');
+  
+  try {
+    await mkdir(errorDir, { recursive: true });
+    
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `vertex_${errorType}_${timestamp}.html`;
+    const filepath = join(errorDir, filename);
+    
+    // Save first 512 bytes for analysis
+    const truncated = content.slice(0, 512);
+    await writeFile(filepath, truncated, 'utf-8');
+    
+    log.info({ filepath, size: truncated.length }, 'Saved HTML error artifact');
+    return filepath;
+  } catch (err) {
+    log.error({ error: err }, 'Failed to save HTML error artifact');
+    return '';
+  }
 }
 
 /**
@@ -82,6 +109,10 @@ export class GeminiImageAdapter implements ImageGenProvider {
   private vertex: VertexAI;
   private model: any;
   private log = createOperationLogger('GeminiImageAdapter');
+  private lastProbeTime: number = 0;
+  private lastProbeResult: boolean = false;
+  private readonly PROBE_CACHE_MS = 5 * 60 * 1000; // 5 minutes
+  
   constructor(config: GeminiAdapterConfig) {
     
     // Initialize Vertex AI with ADC (no API keys)
@@ -90,8 +121,8 @@ export class GeminiImageAdapter implements ImageGenProvider {
       location: config.location 
     });
     
-    this.model = this.vertex.preview.getGenerativeModel({
-      model: 'gemini-2.5-flash-image-preview',
+    this.model = this.vertex.getGenerativeModel({
+      model: 'gemini-1.5-flash',
       generationConfig: {
         temperature: 0.8,
         maxOutputTokens: 4096,
@@ -102,6 +133,77 @@ export class GeminiImageAdapter implements ImageGenProvider {
       project: config.project, 
       location: config.location 
     }, 'Initialized Gemini adapter');
+  }
+
+  /**
+   * Probe Vertex AI availability with cached results
+   */
+  async probe(): Promise<boolean> {
+    const now = Date.now();
+    
+    // Return cached result if still valid
+    if (this.lastProbeTime && (now - this.lastProbeTime) < this.PROBE_CACHE_MS) {
+      this.log.debug({ 
+        cached: true, 
+        result: this.lastProbeResult,
+        cacheAge: Math.round((now - this.lastProbeTime) / 1000) 
+      }, 'Returning cached probe result');
+      return this.lastProbeResult;
+    }
+    
+    try {
+      // Simple probe: test prompt without images
+      const probeRequest = {
+        contents: [{
+          role: 'user',
+          parts: [{ text: 'Respond with OK' }]
+        }]
+      };
+      
+      this.log.debug('Probing Vertex AI availability');
+      
+      const response = await this.model.generateContent(probeRequest);
+      
+      // Check if we got a valid response
+      const hasValidResponse = response?.response?.candidates?.length > 0;
+      
+      // Cache successful result
+      this.lastProbeTime = now;
+      this.lastProbeResult = hasValidResponse;
+      
+      this.log.info({ 
+        available: hasValidResponse,
+        project: env.GOOGLE_CLOUD_PROJECT,
+        location: env.GOOGLE_CLOUD_LOCATION
+      }, 'Vertex AI probe completed');
+      
+      return hasValidResponse;
+      
+    } catch (error: any) {
+      // Cache failed result
+      this.lastProbeTime = now;
+      this.lastProbeResult = false;
+      
+      // Log specific error type
+      if (error?.status === 404 || error?.message?.includes('NOT_FOUND')) {
+        this.log.warn({ 
+          error: 'Model entitlement required',
+          project: env.GOOGLE_CLOUD_PROJECT
+        }, 'Vertex AI probe failed - model not accessible');
+      } else if (error?.status === 403) {
+        this.log.warn({ 
+          error: 'Permission denied',
+          project: env.GOOGLE_CLOUD_PROJECT
+        }, 'Vertex AI probe failed - IAM permissions');
+      } else {
+        this.log.warn({ 
+          error: error?.message || 'Unknown error',
+          status: error?.status
+        }, 'Vertex AI probe failed');
+      }
+      
+      return false;
+    }
   }
 
   /**
@@ -276,58 +378,186 @@ export class GeminiImageAdapter implements ImageGenProvider {
    * Generate single image with style-only conditioning
    */
   private async generateImage(prompt: string, styleRefs: string[]): Promise<Buffer> {
-    // Layer 1: System prompt with style-only instruction
-    const systemPrompt = {
-      role: 'system',
-      parts: [{ text: STYLE_ONLY_PREFIX }],
-    };
-    
-    // Layer 2: Attach style references as multimodal parts
-    const styleParts = await Promise.all(
-      styleRefs.map(async (refPath) => {
-        const buffer = await readFile(refPath);
-        return {
-          inlineData: {
-            data: buffer.toString('base64'),
-            mimeType: 'image/png',
-          },
+    try {
+      // Layer 1: System prompt with style-only instruction
+      const systemPrompt = {
+        role: 'system',
+        parts: [{ text: STYLE_ONLY_PREFIX }],
+      };
+      
+      // Layer 2: Attach style references as multimodal parts
+      const styleParts = await Promise.all(
+        styleRefs.map(async (refPath) => {
+          const buffer = await readFile(refPath);
+          return {
+            inlineData: {
+              data: buffer.toString('base64'),
+              mimeType: 'image/png',
+            },
+          };
+        })
+      );
+      
+      // Combine prompt text with style references
+      const userParts = [{ text: prompt }, ...styleParts];
+      
+      const request = {
+        contents: [
+          systemPrompt,
+          { role: 'user', parts: userParts },
+        ],
+      };
+      
+      // Tap request if debug is enabled
+      await tapRequestResponse(request, null, 'generate-image');
+      
+      // Make the API call
+      const response = await this.model.generateContent(request);
+      
+      // Tap response if debug is enabled
+      await tapRequestResponse(null, response, 'generate-image');
+      
+      // Check if response was blocked
+      if (isBlockedResponse(response.response)) {
+        const reason = getBlockReason(response.response);
+        throw new Error(`Generation blocked: ${reason || 'Unknown reason'}`);
+      }
+      
+      // Extract image data using new parser
+      const imageBase64 = extractFirstImageBase64(response.response);
+      if (!imageBase64) {
+        throw new Error('No image data in response');
+      }
+      
+      // Convert to PNG buffer
+      return toPngBufferFromB64(imageBase64);
+    } catch (error: any) {
+      // Check if the error response is HTML (non-JSON)
+      if (error?.response && typeof error.response === 'string') {
+        const responseStr = error.response.toString();
+        
+        // Detect HTML response
+        if (responseStr.includes('<!DOCTYPE') || responseStr.includes('<html')) {
+          // Save HTML artifact for debugging
+          const artifactPath = await saveHtmlErrorArtifact(responseStr, 'html_error');
+          
+          const problemError = {
+            type: 'urn:vertex:html-error-response',
+            title: 'Non-JSON Error Response',
+            detail: 'Vertex AI returned HTML error page instead of JSON. This typically indicates a service outage or authentication issue.',
+            status: 503,
+            instance: crypto.randomUUID(),
+            meta: {
+              project: env.GOOGLE_CLOUD_PROJECT,
+              location: env.GOOGLE_CLOUD_LOCATION,
+              artifactPath,
+              firstBytes: responseStr.slice(0, 100)
+            }
+          };
+          this.log.error(problemError, 'Vertex AI returned HTML error - service issue detected');
+          throw problemError;
+        }
+      }
+      
+      // Handle specific Vertex AI errors
+      if (error?.status === 404 || error?.message?.includes('NOT_FOUND')) {
+        // Check if error message indicates model not found
+        const isModelNotFound = error?.message?.includes('Publisher Model') || 
+                                error?.message?.includes('was not found');
+        
+        const problemError = {
+          type: isModelNotFound ? 'urn:vertex:model-entitlement' : 'urn:vertex:model-not-found',
+          title: isModelNotFound ? 'Model Entitlement Required' : 'Model Not Found',
+          detail: isModelNotFound 
+            ? `Project ${env.GOOGLE_CLOUD_PROJECT} lacks entitlement to Gemini models in ${env.GOOGLE_CLOUD_LOCATION}. Contact Google Cloud support to enable access.`
+            : `Model not available in ${env.GOOGLE_CLOUD_LOCATION} for project ${env.GOOGLE_CLOUD_PROJECT}`,
+          status: 404,
+          instance: crypto.randomUUID(),
+          meta: {
+            project: env.GOOGLE_CLOUD_PROJECT,
+            location: env.GOOGLE_CLOUD_LOCATION,
+            model: 'gemini-1.5-flash',
+            action: isModelNotFound ? 'Request entitlement from Google Cloud support' : 'Check model availability'
+          }
         };
-      })
-    );
-    
-    // Combine prompt text with style references
-    const userParts = [{ text: prompt }, ...styleParts];
-    
-    const request = {
-      contents: [
-        systemPrompt,
-        { role: 'user', parts: userParts },
-      ],
-    };
-    
-    // Tap request if debug is enabled
-    await tapRequestResponse(request, null, 'generate-image');
-    
-    // Make the API call
-    const response = await this.model.generateContent(request);
-    
-    // Tap response if debug is enabled
-    await tapRequestResponse(null, response, 'generate-image');
-    
-    // Check if response was blocked
-    if (isBlockedResponse(response.response)) {
-      const reason = getBlockReason(response.response);
-      throw new Error(`Generation blocked: ${reason || 'Unknown reason'}`);
+        this.log.error(problemError, 'Vertex AI model not accessible - falling back to batch');
+        throw problemError;
+      }
+      
+      if (error?.status === 403 || error?.message?.includes('PERMISSION_DENIED')) {
+        const problemError = {
+          type: 'urn:vertex:permission-denied',
+          title: 'Permission Denied',
+          detail: `IAM permission denied for Vertex AI in project ${env.GOOGLE_CLOUD_PROJECT}`,
+          status: 403,
+          instance: crypto.randomUUID(),
+          meta: {
+            project: env.GOOGLE_CLOUD_PROJECT,
+            location: env.GOOGLE_CLOUD_LOCATION,
+            requiredRole: 'roles/aiplatform.user'
+          }
+        };
+        this.log.error(problemError, 'Vertex AI permission denied - falling back to batch');
+        throw problemError;
+      }
+      
+      // Handle rate limiting
+      if (error?.status === 429 || error?.message?.includes('RESOURCE_EXHAUSTED')) {
+        const problemError = {
+          type: 'urn:vertex:rate-limit',
+          title: 'Rate Limit Exceeded',
+          detail: 'Vertex AI rate limit exceeded. Reduce concurrency or wait before retrying.',
+          status: 429,
+          instance: crypto.randomUUID(),
+          meta: {
+            project: env.GOOGLE_CLOUD_PROJECT,
+            location: env.GOOGLE_CLOUD_LOCATION,
+            suggestion: 'Reduce NN_MAX_CONCURRENCY to 1 or 2'
+          }
+        };
+        this.log.warn(problemError, 'Vertex AI rate limit hit');
+        throw problemError;
+      }
+      
+      // Handle service unavailable
+      if (error?.status === 503 || error?.message?.includes('SERVICE_UNAVAILABLE')) {
+        const problemError = {
+          type: 'urn:vertex:service-unavailable',
+          title: 'Service Temporarily Unavailable',
+          detail: 'Vertex AI service is temporarily unavailable. Please try again later.',
+          status: 503,
+          instance: crypto.randomUUID(),
+          meta: {
+            project: env.GOOGLE_CLOUD_PROJECT,
+            location: env.GOOGLE_CLOUD_LOCATION
+          }
+        };
+        this.log.warn(problemError, 'Vertex AI service unavailable');
+        throw problemError;
+      }
+      
+      // Re-throw other errors with enhanced context
+      if (error?.status || error?.code) {
+        const problemError = {
+          type: 'urn:vertex:api-error',
+          title: 'Vertex AI API Error',
+          detail: error?.message || 'Unknown error occurred',
+          status: error?.status || 500,
+          instance: crypto.randomUUID(),
+          meta: {
+            project: env.GOOGLE_CLOUD_PROJECT,
+            location: env.GOOGLE_CLOUD_LOCATION,
+            errorCode: error?.code,
+            originalError: error?.message
+          }
+        };
+        this.log.error(problemError, 'Vertex AI API error');
+        throw problemError;
+      }
+      
+      // Re-throw unknown errors
+      throw error;
     }
-    
-    // Extract image data using new parser
-    const imageBase64 = extractFirstImageBase64(response.response);
-    if (!imageBase64) {
-      throw new Error('No image data in response');
-    }
-    
-    // Convert to PNG buffer
-    return toPngBufferFromB64(imageBase64);
   }
 
   /**

@@ -228,6 +228,14 @@ export const PollResponse = z.object({
     result: z.object({
       message: z.string(),
       outputLocation: z.string(),
+      dryRunStats: z.object({
+        promptCount: z.number(),
+        variants: z.number(),
+        estimatedImages: z.number(),
+        estimatedTime: z.string(),
+        estimatedCost: z.string(),
+        provider: z.string(),
+      }).optional(),
     }),
     actions: z.object({
       fetchResults: z.string(),

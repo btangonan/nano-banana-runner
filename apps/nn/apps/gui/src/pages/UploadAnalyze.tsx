@@ -173,6 +173,35 @@ export function UploadAnalyze({ onNext, toast }: UploadAnalyzeProps) {
 
   return (
     <div className="space-y-6">
+      {/* Header with Start Over button */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-semibold">Upload & Analyze</h1>
+          <p className="text-muted-foreground">Upload images and analyze their visual properties</p>
+        </div>
+        {(files.length > 0 || uploadResult || analyzeResult) && (
+          <Button 
+            onClick={() => {
+              // Reset all state
+              setFiles([])
+              setUploadResult(null)
+              setAnalyzeResult(null)
+              // Clear any uploaded files
+              files.forEach(f => f.preview && URL.revokeObjectURL(f.preview))
+              toast({
+                title: 'Reset complete',
+                description: 'All data has been cleared. You can start fresh.',
+                variant: 'default',
+              })
+            }}
+            variant="outline"
+            size="sm"
+          >
+            Start Over
+          </Button>
+        )}
+      </div>
+
       {/* Upload Section */}
       <Card>
         <CardHeader>
@@ -397,7 +426,7 @@ export function UploadAnalyze({ onNext, toast }: UploadAnalyzeProps) {
                     <div className="text-lg font-bold text-green-800">
                       {analyzeResult.count}
                     </div>
-                    <div className="text-green-700">Total Images</div>
+                    <div className="text-green-700">Analyzed</div>
                   </div>
                   <div className="text-center">
                     <div className="text-lg font-bold text-green-800">
@@ -406,10 +435,10 @@ export function UploadAnalyze({ onNext, toast }: UploadAnalyzeProps) {
                     <div className="text-green-700">Successful</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-lg font-bold text-green-800">
+                    <div className="text-lg font-bold text-orange-600">
                       {analyzeResult.failed}
                     </div>
-                    <div className="text-green-700">Failed</div>
+                    <div className="text-orange-700">Failed</div>
                   </div>
                 </div>
               </div>
@@ -447,9 +476,26 @@ export function UploadAnalyze({ onNext, toast }: UploadAnalyzeProps) {
                 </div>
               )}
 
-              <Button onClick={onNext} className="w-full" size="lg">
-                Continue to Remix & Review
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  onClick={() => {
+                    // Reset all state
+                    setFiles([])
+                    setUploadResult(null)
+                    setAnalyzeResult(null)
+                    // Clear any uploaded files
+                    files.forEach(f => f.preview && URL.revokeObjectURL(f.preview))
+                  }}
+                  variant="outline" 
+                  className="flex-1"
+                  size="lg"
+                >
+                  Start Over
+                </Button>
+                <Button onClick={onNext} className="flex-1" size="lg">
+                  Continue to Remix & Review
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>
