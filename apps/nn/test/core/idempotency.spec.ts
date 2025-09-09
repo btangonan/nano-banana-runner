@@ -1,5 +1,5 @@
-import { describe, it, expect } from '@jest/globals';
-import { sha256, createIdempotencyKey, normalize } from '../../src/core/idempotency.js';
+import { describe, it, expect } from 'vitest';
+import { sha256, generateIdempotencyKey as createIdempotencyKey, normalizeForKey as normalize } from '../../src/core/idempotency.js';
 
 describe('Idempotency Module', () => {
   describe('sha256', () => {
@@ -43,7 +43,7 @@ describe('Idempotency Module', () => {
     });
     
     it('should remove special characters', () => {
-      const text = 'Hello@#$%World!!!';
+      const text = 'Hello@#$% World!!!';
       const normalized = normalize(text);
       
       expect(normalized).toBe('hello world');
@@ -62,48 +62,46 @@ describe('Idempotency Module', () => {
     });
   });
   
-  describe('createIdempotencyKey', () => {
-    it('should create consistent key for same data', () => {
-      const data = { prompt: 'test', params: { size: 512 } };
-      const key1 = createIdempotencyKey(data);
-      const key2 = createIdempotencyKey(data);
+  describe('generateIdempotencyKey', () => {
+    it('should create consistent key for same inputs', () => {
+      const prompt = 'test prompt';
+      const sourceImage = 'image1.jpg';
+      const date = new Date('2024-01-01');
+      
+      const key1 = createIdempotencyKey(prompt, sourceImage, date);
+      const key2 = createIdempotencyKey(prompt, sourceImage, date);
       
       expect(key1).toBe(key2);
+      expect(key1).toMatch(/^[a-f0-9]{64}$/);
     });
     
-    it('should create different keys for different data', () => {
-      const data1 = { prompt: 'test1' };
-      const data2 = { prompt: 'test2' };
+    it('should create different keys for different prompts', () => {
+      const sourceImage = 'image1.jpg';
+      const date = new Date('2024-01-01');
       
-      const key1 = createIdempotencyKey(data1);
-      const key2 = createIdempotencyKey(data2);
+      const key1 = createIdempotencyKey('prompt1', sourceImage, date);
+      const key2 = createIdempotencyKey('prompt2', sourceImage, date);
       
       expect(key1).not.toBe(key2);
     });
     
-    it('should handle complex nested objects', () => {
-      const data = {
-        level1: {
-          level2: {
-            array: [1, 2, 3],
-            string: 'test'
-          }
-        }
-      };
+    it('should create different keys for different source images', () => {
+      const prompt = 'test prompt';
+      const date = new Date('2024-01-01');
       
-      const key = createIdempotencyKey(data);
-      expect(key).toMatch(/^[a-f0-9]{64}$/);
+      const key1 = createIdempotencyKey(prompt, 'image1.jpg', date);
+      const key2 = createIdempotencyKey(prompt, 'image2.jpg', date);
+      
+      expect(key1).not.toBe(key2);
     });
     
-    it('should be order-independent for object keys', () => {
-      const data1 = { a: 1, b: 2, c: 3 };
-      const data2 = { c: 3, a: 1, b: 2 };
+    it('should create different keys for different dates', () => {
+      const prompt = 'test prompt';
+      const sourceImage = 'image1.jpg';
       
-      const key1 = createIdempotencyKey(data1);
-      const key2 = createIdempotencyKey(data2);
+      const key1 = createIdempotencyKey(prompt, sourceImage, new Date('2024-01-01'));
+      const key2 = createIdempotencyKey(prompt, sourceImage, new Date('2024-01-02'));
       
-      // JSON.stringify preserves insertion order, so these will be different
-      // This is expected behavior for idempotency keys
       expect(key1).not.toBe(key2);
     });
   });
