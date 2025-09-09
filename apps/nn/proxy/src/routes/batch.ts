@@ -24,9 +24,84 @@ export default async function batchRoutes(app: FastifyInstance) {
   
   const client = new GeminiBatchClient(apiKey ?? "DEV-KEY");
 
-  // Submit batch job
-  app.post("/batch/submit", async (req, reply) => {
-    const parsed = SubmitSchema.safeParse(req.body);
+  // Submit batch job (with Direct Mode support)
+  app.post("/batch/submit", {
+    config: {
+      // Apply body size limit based on Direct Mode
+      bodyLimit: app.config.DIRECT_MAX_BODY_BYTES
+    }
+  }, async (req, reply) => {
+    const body = req.body as any;
+    
+    // Direct Mode detection
+    const isDirect = app.config.NN_ENABLE_DIRECT_MODE && 
+                     body?.rows && 
+                     Array.isArray(body.rows);
+    
+    // Apply guardrails for Direct Mode
+    if (isDirect) {
+      // Validation caps (without new schemas)
+      if (body.rows.length > app.config.DIRECT_MAX_ROWS) {
+        return reply.code(413).send({
+          type: "about:blank",
+          title: "Too many rows",
+          detail: `Maximum ${app.config.DIRECT_MAX_ROWS} rows allowed in direct mode`,
+          status: 413
+        });
+      }
+      
+      // Validate each row
+      for (let i = 0; i < body.rows.length; i++) {
+        const row = body.rows[i];
+        
+        // Check prompt length
+        if (!row.prompt || row.prompt.length > app.config.DIRECT_MAX_PROMPT_LEN) {
+          return reply.code(400).send({
+            type: "about:blank",
+            title: "Prompt too long",
+            detail: `Row ${i}: Maximum ${app.config.DIRECT_MAX_PROMPT_LEN} characters per prompt`,
+            status: 400
+          });
+        }
+        
+        // Check tags
+        if (row.tags && row.tags.length > app.config.DIRECT_MAX_TAGS) {
+          return reply.code(400).send({
+            type: "about:blank",
+            title: "Too many tags",
+            detail: `Row ${i}: Maximum ${app.config.DIRECT_MAX_TAGS} tags per row`,
+            status: 400
+          });
+        }
+        
+        // Check tag length
+        if (row.tags) {
+          for (const tag of row.tags) {
+            if (tag.length > app.config.DIRECT_MAX_TAG_LEN) {
+              return reply.code(400).send({
+                type: "about:blank",
+                title: "Tag too long",
+                detail: `Row ${i}: Maximum ${app.config.DIRECT_MAX_TAG_LEN} characters per tag`,
+                status: 400
+              });
+            }
+          }
+        }
+      }
+      
+      // Force style-only guard for Direct Mode
+      body.styleOnly = true;
+      
+      // Log Direct Mode usage (with redacted prompt preview)
+      app.log.info({ 
+        mode: "direct",
+        rows: body.rows.length,
+        firstPromptPreview: body.rows[0]?.prompt?.substring(0, 120) + "..."
+      }, "Direct mode batch submission");
+    }
+    
+    // Continue with existing validation
+    const parsed = SubmitSchema.safeParse(body);
     if (!parsed.success) {
       return reply.code(400).send({ 
         type: "about:blank", 
@@ -38,10 +113,17 @@ export default async function batchRoutes(app: FastifyInstance) {
     
     try {
       const res = await client.submit(parsed.data);
-      app.log.info({ jobId: res.jobId, estCount: res.estCount }, "Batch job submitted");
+      app.log.info({ 
+        jobId: res.jobId, 
+        estCount: res.estCount,
+        mode: isDirect ? "direct" : "remix"
+      }, "Batch job submitted");
       return reply.send(res);
     } catch (error: any) {
-      app.log.error({ error: error.message }, "Batch submit failed");
+      app.log.error({ 
+        error: error.message,
+        mode: isDirect ? "direct" : "remix"
+      }, "Batch submit failed");
       return reply.code(500).send({
         type: "about:blank",
         title: "Batch submit failed",
