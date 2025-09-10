@@ -316,7 +316,7 @@ Direct Mode allows power users to bypass the remix step and submit `PromptRow[]`
 
 ### Status
 ✅ **Backend Complete**: All validation guardrails implemented, tested, and pushed to production
-⏳ **Frontend Pending**: UI components documented in `DIRECT_MODE_FRONTEND_GUIDE.md`
+⏳ **Frontend Pending**: UI components documented in `docs/direct-mode/DIRECT_MODE_FRONTEND_GUIDE.md`
 
 ### Environment Configuration
 ```bash
@@ -390,7 +390,7 @@ curl -X POST http://127.0.0.1:8787/batch/submit \
 ```
 
 ### Frontend Implementation Guide
-Complete implementation available in `DIRECT_MODE_FRONTEND_GUIDE.md`:
+Complete implementation available in `docs/direct-mode/DIRECT_MODE_FRONTEND_GUIDE.md`:
 - **DirectJsonPanel Component**: ~100 LOC for JSON editor with validation
 - **SubmitMonitor Updates**: ~50 LOC for mode toggle integration
 - **Dry-run Flow**: Required validation before submission
