@@ -70,7 +70,10 @@ export function Gallery({ jobId: propJobId, onNext, onBack, toast }: GalleryProp
         offset: (page * itemsPerPage).toString(),
       })
       
-      return apiClient.get(`/ui/fetch?${params.toString()}`, FetchResponse)
+      console.log('[Gallery] Fetching with params:', params.toString())
+      const response = await apiClient.get(`/ui/fetch?${params.toString()}`, FetchResponse)
+      console.log('[Gallery] API response:', response)
+      return response
     },
     enabled: !!jobId,
     refetchInterval: false,
@@ -78,13 +81,22 @@ export function Gallery({ jobId: propJobId, onNext, onBack, toast }: GalleryProp
   })
 
   // Filter items based on search and type filter
-  const filteredItems = data?.results && 'items' in data.results 
-    ? data.results.items.filter(item => {
-        const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase())
-        const matchesType = typeFilter === 'all' || item.type === typeFilter
-        return matchesSearch && matchesType
-      })
+  const rawItems = data?.results && 'items' in data.results 
+    ? data.results.items 
     : []
+  
+  const filteredItems = rawItems.filter(item => {
+    const matchesSearch = !searchTerm || item.name.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesType = typeFilter === 'all' || item.type === typeFilter
+    return matchesSearch && matchesType
+  })
+  
+  // Debug logging
+  console.log('[Gallery] JobId:', jobId)
+  console.log('[Gallery] Data:', data)
+  console.log('[Gallery] Raw items:', rawItems)
+  console.log('[Gallery] Search term:', searchTerm, 'Type filter:', typeFilter)
+  console.log('[Gallery] Filtered items:', filteredItems)
 
   // Get unique types for filter dropdown
   const availableTypes = data?.results && 'items' in data.results
