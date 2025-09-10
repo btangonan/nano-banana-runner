@@ -9,6 +9,7 @@ import type {
   CostEstimate
 } from './types.js';
 import { SharpProvider } from './sharp.js';
+import { GeminiProvider } from './gemini.js';
 
 /**
  * LRU Cache implementation for in-memory caching
@@ -333,9 +334,8 @@ export function createAnalyzeProvider(config: ProviderFactoryConfig): AnalyzePro
   
   switch (config.provider) {
     case 'gemini':
-      // Note: GeminiProvider will be implemented in PR-2
-      log.info('Gemini provider requested but not yet implemented - using Sharp');
-      primaryProvider = new SharpProvider();
+      log.info('Creating Gemini provider');
+      primaryProvider = new GeminiProvider();
       break;
     case 'sharp':
     default:
