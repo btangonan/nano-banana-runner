@@ -396,7 +396,48 @@ Complete implementation available in `DIRECT_MODE_FRONTEND_GUIDE.md`:
 - **Dry-run Flow**: Required validation before submission
 - **Templates**: Pre-built JSON templates for common use cases
 
-## Recent Fixes (2025-09-08)
+## Recent Fixes (2025-09-10)
+
+### Gallery Display Issues (RESOLVED)
+**Issue**: Gallery showed "0 generated images" despite backend having images
+**Cause**: Multiple issues:
+1. Gallery filtering logic too strict (required searchTerm to exist)
+2. React Query caching stale data
+3. JobId not properly propagated from SubmitMonitor to Gallery
+
+**Fix**: 
+```typescript
+// Fixed filtering logic - made search optional
+const matchesSearch = !searchTerm || item.name.toLowerCase().includes(searchTerm.toLowerCase())
+
+// Disabled caching to always fetch fresh data
+staleTime: 0,  // Don't cache results
+gcTime: 0,      // Remove from cache immediately
+
+// Fixed jobId propagation in App.tsx
+onNext={(completedJobId?: string) => {
+  if (completedJobId) setJobId(completedJobId)
+  setCurrentStep(3)
+}}
+```
+
+### Image Generation Failures (RESOLVED)
+**Issue**: Some images fail silently during batch generation
+**Symptoms**: Upload 3 images, only 2 generated (e.g., image_1 missing)
+**Cause**: Gemini API failures (rate limits, content filters, network issues)
+
+**Fix**: Improved error reporting
+```typescript
+// Better error logging with specific image identification
+console.error(`Failed to generate image_${i}_variant_${v}:`, error);
+job.problems.push({
+  title: `Image generation failed for image_${i}_variant_${v}`,
+  detail: error.message,
+  instance: `image_${i}_variant_${v}`
+});
+```
+
+### Previous Fixes (2025-09-08)
 
 ### Toast Component Crash (RESOLVED)
 **Issue**: React "Element type is invalid...got: undefined"
