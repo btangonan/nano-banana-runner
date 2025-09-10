@@ -176,11 +176,13 @@ export class GeminiBatchClient {
             job.completed++;
             
           } catch (error) {
+            console.error(`Failed to generate image_${i}_variant_${v}:`, error);
             job.problems.push({
               type: "about:blank",
-              title: "Image generation failed",
+              title: `Image generation failed for image_${i}_variant_${v}`,
               detail: error instanceof Error ? error.message : "Unknown error",
-              status: 500
+              status: 500,
+              instance: `image_${i}_variant_${v}`
             });
             job.completed++; // Still count as processed
           }

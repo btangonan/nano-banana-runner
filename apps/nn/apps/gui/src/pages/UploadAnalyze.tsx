@@ -48,9 +48,10 @@ export function UploadAnalyze({ onNext, toast }: UploadAnalyzeProps) {
       })
       
       if (data.warnings && data.warnings.length > 0) {
+        const warningDetails = data.warnings.join(', ')
         toast({
           title: 'Upload warnings',
-          description: `${data.warnings.length} files had issues`,
+          description: `${data.warnings.length} file(s) had issues: ${warningDetails}`,
           variant: 'warning',
         })
       }
