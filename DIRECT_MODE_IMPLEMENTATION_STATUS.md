@@ -1,8 +1,9 @@
 # Direct Mode Implementation Status
 
 **Date**: 2025-09-09  
-**Status**: Backend Complete ✅ | Frontend Pending ⏳  
-**Safety**: Feature Flag OFF by Default 🛡️
+**Status**: Backend Complete & Pushed ✅ | Frontend Pending ⏳  
+**Safety**: Feature Flag OFF by Default 🛡️  
+**Git**: Committed and pushed to `feature/audit-compliance-fixes` branch
 
 ## ✅ What Was Implemented (Backend)
 
@@ -136,6 +137,9 @@ curl -X POST http://127.0.0.1:8787/batch/submit \
 3. ⏳ Frontend UI components
 4. ⏳ End-to-end testing
 5. ⏳ Final documentation update
+
+### Related Bug Fix (2025-09-09)
+**Image Count Bug**: A separate but related issue was fixed where the analyze endpoint was counting cumulative images across sessions. Solution: Added `POST /ui/clear-images` endpoint and "New Session" button in the GUI. See `IMAGE_COUNT_BUG_FIX_SUMMARY.md` for details.
 
 ### To Deploy to Production
 1. Keep `NN_ENABLE_DIRECT_MODE=false` in production

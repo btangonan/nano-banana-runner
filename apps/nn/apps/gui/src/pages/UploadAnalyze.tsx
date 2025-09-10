@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { Progress } from '@/components/ui/Progress'
 import { cn, formatFileSize, isValidImageFile } from '@/lib/utils'
 import { apiClient, ApiError } from '@/lib/client'
-import { UploadResponse, AnalyzeResponse } from '@/lib/contracts'
+import { UploadResponse, AnalyzeResponse, ClearResponse } from '@/lib/contracts'
 import type { ToastProps } from '@/components/ui/Toast'
 
 interface UploadAnalyzeProps {
@@ -25,6 +25,7 @@ export function UploadAnalyze({ onNext, toast }: UploadAnalyzeProps) {
   const [files, setFiles] = useState<FileWithPreview[]>([])
   const [uploadResult, setUploadResult] = useState<UploadResponse | null>(null)
   const [analyzeResult, setAnalyzeResult] = useState<AnalyzeResponse | null>(null)
+  const [isFirstUpload, setIsFirstUpload] = useState(true) // Track if this is the first upload
 
   const uploadMutation = useMutation({
     mutationFn: async (files: File[]) => {
@@ -33,10 +34,13 @@ export function UploadAnalyze({ onNext, toast }: UploadAnalyzeProps) {
         formData.append('files', file)
       })
 
-      return apiClient.postFormData('/ui/upload', formData, UploadResponse)
+      // Clear existing images on first upload to prevent accumulation from previous sessions
+      const url = isFirstUpload ? '/ui/upload?clearExisting=true' : '/ui/upload'
+      return apiClient.postFormData(url, formData, UploadResponse)
     },
     onSuccess: (data) => {
       setUploadResult(data)
+      setIsFirstUpload(false) // Mark that we've done the first upload
       toast({
         title: 'Upload successful',
         description: `${data.uploaded} files uploaded successfully`,
@@ -93,6 +97,42 @@ export function UploadAnalyze({ onNext, toast }: UploadAnalyzeProps) {
       } else {
         toast({
           title: 'Analysis failed',
+          description: error.message,
+          variant: 'destructive',
+        })
+      }
+    }
+  })
+
+  const clearSessionMutation = useMutation({
+    mutationFn: async () => {
+      return apiClient.post('/ui/clear-images', {}, ClearResponse)
+    },
+    onSuccess: (data) => {
+      // Reset all local state
+      setFiles([])
+      setUploadResult(null)
+      setAnalyzeResult(null)
+      setIsFirstUpload(true) // Reset first upload flag for new session
+      // Clear any preview URLs
+      files.forEach(f => f.preview && URL.revokeObjectURL(f.preview))
+      
+      toast({
+        title: 'New session started',
+        description: data.message || 'Previous images have been cleared',
+        variant: 'success',
+      })
+    },
+    onError: (error: Error) => {
+      if (error instanceof ApiError) {
+        toast({
+          title: error.problem.title,
+          description: error.problem.detail,
+          variant: 'destructive',
+        })
+      } else {
+        toast({
+          title: 'Failed to start new session',
           description: error.message,
           variant: 'destructive',
         })
@@ -173,33 +213,55 @@ export function UploadAnalyze({ onNext, toast }: UploadAnalyzeProps) {
 
   return (
     <div className="space-y-6">
-      {/* Header with Start Over button */}
+      {/* Header with session management buttons */}
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-semibold">Upload & Analyze</h1>
           <p className="text-muted-foreground">Upload images and analyze their visual properties</p>
         </div>
-        {(files.length > 0 || uploadResult || analyzeResult) && (
+        <div className="flex gap-2">
+          {/* New Session button - clears server images */}
           <Button 
-            onClick={() => {
-              // Reset all state
-              setFiles([])
-              setUploadResult(null)
-              setAnalyzeResult(null)
-              // Clear any uploaded files
-              files.forEach(f => f.preview && URL.revokeObjectURL(f.preview))
-              toast({
-                title: 'Reset complete',
-                description: 'All data has been cleared. You can start fresh.',
-                variant: 'default',
-              })
-            }}
-            variant="outline"
+            onClick={() => clearSessionMutation.mutate()}
+            disabled={clearSessionMutation.isPending}
+            variant="default"
             size="sm"
+            title="Clears all previously uploaded images from the server and starts fresh"
           >
-            Start Over
+            {clearSessionMutation.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Clearing...
+              </>
+            ) : (
+              'New Session'
+            )}
           </Button>
-        )}
+          
+          {/* Start Over button - resets UI state only */}
+          {(files.length > 0 || uploadResult || analyzeResult) && (
+            <Button 
+              onClick={() => {
+                // Reset all state (UI only)
+                setFiles([])
+                setUploadResult(null)
+                setAnalyzeResult(null)
+                // Clear any uploaded files
+                files.forEach(f => f.preview && URL.revokeObjectURL(f.preview))
+                toast({
+                  title: 'UI reset complete',
+                  description: 'Local state cleared. Use "New Session" to clear server images.',
+                  variant: 'default',
+                })
+              }}
+              variant="outline"
+              size="sm"
+              title="Resets the current UI without clearing server images"
+            >
+              Start Over
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Upload Section */}

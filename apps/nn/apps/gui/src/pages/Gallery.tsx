@@ -17,6 +17,7 @@ import { FetchRequest, FetchResponse } from '@/lib/contracts'
 import type { ToastProps } from '@/components/ui/Toast'
 
 interface GalleryProps {
+  jobId?: string | null
   onNext?: () => void
   onBack: () => void
   toast: (props: Omit<ToastProps, 'id'>) => void
@@ -33,8 +34,8 @@ interface GalleryItem {
   downloadUrl: string
 }
 
-export function Gallery({ onNext, onBack, toast }: GalleryProps) {
-  // Get jobId from URL params or state
+export function Gallery({ jobId: propJobId, onNext, onBack, toast }: GalleryProps) {
+  // Get jobId from props or URL params
   const [jobId, setJobId] = useState<string>('')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [selectedImage, setSelectedImage] = useState<GalleryItem | null>(null)
@@ -43,14 +44,18 @@ export function Gallery({ onNext, onBack, toast }: GalleryProps) {
   const [page, setPage] = useState(0)
   const itemsPerPage = 20
 
-  // Initialize jobId from URL params
+  // Initialize jobId from props or URL params
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search)
-    const urlJobId = urlParams.get('jobId')
-    if (urlJobId) {
-      setJobId(urlJobId)
+    if (propJobId) {
+      setJobId(propJobId)
+    } else {
+      const urlParams = new URLSearchParams(window.location.search)
+      const urlJobId = urlParams.get('jobId')
+      if (urlJobId) {
+        setJobId(urlJobId)
+      }
     }
-  }, [])
+  }, [propJobId])
 
   // Fetch gallery data
   const { data, isLoading, error, refetch } = useQuery({
@@ -113,7 +118,7 @@ export function Gallery({ onNext, onBack, toast }: GalleryProps) {
       })
     } catch (error) {
       toast({
-        variant: 'error',
+        variant: 'destructive',
         title: 'Download Failed',
         description: 'Could not download the image',
       })
@@ -144,7 +149,7 @@ export function Gallery({ onNext, onBack, toast }: GalleryProps) {
       })
     } catch (error) {
       toast({
-        variant: 'error',
+        variant: 'destructive',
         title: 'Bulk Download Failed',
         description: 'Could not download the results archive',
       })

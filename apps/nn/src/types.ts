@@ -159,6 +159,7 @@ export interface ImageGenProvider {
 // Asynchronous provider (new, for Gemini Batch)
 export interface AsyncImageGenProvider {
   submit(req: { 
+    jobId?: string;  // Optional job ID to use (if not provided, provider will generate one)
     rows: PromptRow[]; 
     variants: 1 | 2 | 3; 
     styleOnly: true; 

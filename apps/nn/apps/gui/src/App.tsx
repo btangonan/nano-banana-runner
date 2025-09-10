@@ -27,6 +27,7 @@ const steps = [
 
 function App() {
   const [currentStep, setCurrentStep] = useState(0)
+  const [jobId, setJobId] = useState<string | null>(null)
   const { toasts, toast, dismiss } = useToast()
 
   const StepIndicator = () => (
@@ -82,12 +83,18 @@ function App() {
         />
       case 2:
         return <SubmitMonitor
-          onNext={() => setCurrentStep(3)}
+          onNext={(completedJobId?: string) => {
+            if (completedJobId) {
+              setJobId(completedJobId)
+            }
+            setCurrentStep(3)
+          }}
           onBack={() => setCurrentStep(1)}
           toast={toast}
         />
       case 3:
         return <Gallery
+          jobId={jobId}
           onBack={() => setCurrentStep(2)}
           toast={toast}
         />

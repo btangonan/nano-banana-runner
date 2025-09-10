@@ -25,6 +25,7 @@ export class GeminiBatchAdapter implements AsyncImageGenProvider {
    * Submit batch job to Gemini via relay
    */
   async submit(req: { 
+    jobId?: string;  // Optional job ID to use
     rows: PromptRow[]; 
     variants: 1 | 2 | 3; 
     styleOnly: true; 
@@ -46,6 +47,7 @@ export class GeminiBatchAdapter implements AsyncImageGenProvider {
     
     try {
       const result = await this.client.submit({
+        jobId: req.jobId,  // Pass optional jobId to relay client
         rows: batchRows,
         variants: req.variants,
         styleOnly: true,

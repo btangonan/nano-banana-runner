@@ -84,6 +84,10 @@
   - Auto-compression and deduplication
   - CLI safety with --dry-run defaults
   - Style-only enforcement
+- **Direct Mode Backend**: Feature-flagged JSON submission bypass (OFF by default)
+  - Validation guardrails without new schemas
+  - Reuses existing `PromptRow` type
+  - Zero breaking changes to existing flow
 - **Mock batch functionality**: Since Gemini lacks true batch API
 - **Enhanced CORS**: Proxy self-origin support (ports 8787)
 - Smoke tests for batch operations (smoke.batch.spec.ts)
@@ -97,8 +101,13 @@
 - Image analysis with Sharp
 - CLI with batch commands
 - **Provider mapping helpers**: UI to API provider name translation
+- **Zero-risk refactoring system**: Feature-flagged improvements (NEW)
+- **Modularized geminiImage.ts**: Split 581 lines into 3 modules (NEW)
+- **Deterministic hash computation**: Resolved TODO with feature flag (NEW)
+- **Comprehensive test suite**: 20+ tests for refactored modules (NEW)
 
 ⏳ **Pending**:
+- Direct Mode Frontend UI (documented, ready to implement)
 - GUI with Fastify + React
 - CSV export/import
 - Duplicate detection
@@ -122,8 +131,12 @@ apps/nn/
 │   │   ├── providerFactory.ts # ✅ Unified provider interface
 │   │   ├── geminiBatch.ts # ✅ Batch client with in-memory job tracking
 │   │   ├── batchRelayClient.ts # ✅ Proxy client
-│   │   ├── geminiImage.ts # ✅ Vertex AI fallback
-│   │   └── fs-manifest.ts # ✅ File operations
+│   │   ├── geminiImage.ts # ✅ Vertex AI fallback (refactoring in progress)
+│   │   ├── fs-manifest.ts # ✅ File operations
+│   │   └── gemini/        # ✅ Refactored modules (NEW)
+│   │       ├── utils.ts   # ✅ Retry logic and utilities
+│   │       ├── errorHandling.ts # ✅ Problem+JSON error management
+│   │       └── adapter.ts # ✅ Feature-flagged switching
 │   ├── workflows/         # ✅ Batch orchestration
 │   │   └── preflight.ts   # ✅ Size limits and validation
 │   └── types/             # ✅ Reference pack schemas
@@ -162,6 +175,12 @@ NN_MAX_PER_IMAGE=50
 NN_STYLE_GUARD_ENABLED=true
 PREFLIGHT_COMPRESS=true
 PREFLIGHT_SPLIT=true
+
+# Zero-Risk Refactoring Flags (NEW)
+USE_REFACTORED_GEMINI=false         # Use modularized gemini adapter
+USE_COMPUTED_HASH=false             # Use deterministic hash computation
+USE_MODEL_TAGGER=false              # Use ML-based image tagging
+USE_STRUCTURED_LOGGING=false        # Use structured logging
 ```
 
 ## Vibe Coding Principles (Top 5)
@@ -232,6 +251,22 @@ cd apps/nn/apps/gui && pnpm dev
 curl http://127.0.0.1:8787/healthz  # Should return {"status":"ok"}
 ```
 
+## UI Session Management
+
+### New Session Feature (Image Count Fix)
+The GUI now includes a "New Session" button that clears the server-side `./images` directory to start fresh analysis sessions. This fixes the cumulative image count bug where previous uploads were included in analysis counts.
+
+**Endpoints**:
+- `POST /ui/clear-images` - Clears all images and starts a new session
+  - Returns: `{ cleared: true, message: "..." }`
+  - Idempotent and safe to call multiple times
+  - Used by the "New Session" button in the GUI
+
+**Usage**:
+- Click "New Session" to clear all previously uploaded images
+- "Start Over" button only resets UI state without clearing server images
+- Allows batch uploads within same session until explicitly cleared
+
 ## Batch Processing Implementation
 
 ### Architecture Overview
@@ -273,6 +308,93 @@ curl -s http://127.0.0.1:8787/batch/job-{id}/results | \
   sed 's/^data:image\/[^;]*;base64,//' | \
   base64 -d > image.png
 ```
+
+## Direct Mode Implementation (2025-09-09)
+
+### Overview
+Direct Mode allows power users to bypass the remix step and submit `PromptRow[]` directly to Gemini. This feature is **OFF by default** and protected by a feature flag for safety.
+
+### Status
+✅ **Backend Complete**: All validation guardrails implemented, tested, and pushed to production
+⏳ **Frontend Pending**: UI components documented in `DIRECT_MODE_FRONTEND_GUIDE.md`
+
+### Environment Configuration
+```bash
+# Direct Mode Feature Flag (OFF by default for safety)
+NN_ENABLE_DIRECT_MODE=false          # Set to true to enable Direct Mode
+
+# Direct Mode Validation Caps
+DIRECT_MAX_ROWS=200                  # Max rows per batch
+DIRECT_MAX_PROMPT_LEN=4000           # Max characters per prompt
+DIRECT_MAX_TAGS=16                   # Max tags per row
+DIRECT_MAX_TAG_LEN=64                # Max characters per tag
+DIRECT_RPM=10                        # Rate limit for Direct Mode
+DIRECT_MAX_BODY_BYTES=1048576        # 1MB max body size
+```
+
+### Key Features
+- **90% Code Reduction**: Reuses existing `PromptRow` type (50 LOC vs 500+ LOC)
+- **Zero Breaking Changes**: Existing remix flow untouched
+- **Production Safe**: Feature flag OFF by default
+- **Validation Guardrails**: All ChatGPT-recommended caps implemented
+- **Single Code Path**: Same endpoint, same validation, same processing
+
+### Backend Implementation
+```typescript
+// Direct Mode detection in batch.ts
+const isDirect = app.config.NN_ENABLE_DIRECT_MODE && 
+                 body?.rows && 
+                 Array.isArray(body.rows);
+
+// Validation guardrails (without new schemas)
+if (isDirect) {
+  // Row count validation
+  if (body.rows.length > app.config.DIRECT_MAX_ROWS) {
+    return reply.code(413).send({/* Problem+JSON */});
+  }
+  
+  // Prompt length validation
+  for (const row of body.rows) {
+    if (row.prompt?.length > app.config.DIRECT_MAX_PROMPT_LEN) {
+      return reply.code(400).send({/* Problem+JSON */});
+    }
+  }
+  
+  // Force style-only for safety
+  body.styleOnly = true;
+}
+```
+
+### Testing Direct Mode
+```bash
+# 1. Enable feature flag
+echo "NN_ENABLE_DIRECT_MODE=true" >> .env
+
+# 2. Restart proxy
+./start-clean.sh restart
+
+# 3. Test Direct Mode submission
+curl -X POST http://127.0.0.1:8787/batch/submit \
+  -H "Content-Type: application/json" \
+  -d '{
+    "rows": [
+      {"prompt": "A serene zen garden", "tags": ["zen"], "seed": 42}
+    ],
+    "variants": 1,
+    "styleOnly": true,
+    "styleRefs": []
+  }'
+
+# 4. Run test script
+./test-direct-mode.sh
+```
+
+### Frontend Implementation Guide
+Complete implementation available in `DIRECT_MODE_FRONTEND_GUIDE.md`:
+- **DirectJsonPanel Component**: ~100 LOC for JSON editor with validation
+- **SubmitMonitor Updates**: ~50 LOC for mode toggle integration
+- **Dry-run Flow**: Required validation before submission
+- **Templates**: Pre-built JSON templates for common use cases
 
 ## Recent Fixes (2025-09-08)
 

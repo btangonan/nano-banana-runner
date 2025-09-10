@@ -37,8 +37,19 @@ cd apps/nn/apps/gui && pnpm dev   # Terminal 2
 - **Proxy API**: http://127.0.0.1:8787
 - **Health Check**: http://127.0.0.1:8787/healthz
 - **Batch Submit**: http://127.0.0.1:8787/batch/submit
+- **Clear Session**: http://127.0.0.1:8787/ui/clear-images
 
-## Recent Fixes (2025-09-08)
+## Recent Fixes (2025-09-09)
+
+### 1. Image Count Bug (NEW)
+```typescript
+// Problem: Cumulative image count across sessions
+// Solution: Added "New Session" button and /ui/clear-images endpoint
+POST /ui/clear-images  // Clears ./images directory
+// GUI: "New Session" button explicitly clears server images
+```
+
+## Previous Fixes (2025-09-08)
 
 ### 1. Toast Component Crash
 ```typescript
@@ -147,6 +158,12 @@ GOOGLE_CLOUD_LOCATION=us-central1
 NN_OUT_DIR=./artifacts
 NN_CONCURRENCY=2
 NN_MAX_PER_IMAGE=50
+
+# Zero-Risk Feature Flags (NEW)
+USE_REFACTORED_GEMINI=false    # Modularized gemini adapter
+USE_COMPUTED_HASH=false        # Deterministic hash computation
+USE_MODEL_TAGGER=false         # ML-based image tagging
+USE_STRUCTURED_LOGGING=false   # Structured logging
 ```
 
 ## Troubleshooting

@@ -43,12 +43,12 @@ cd apps/nn/apps/gui && pnpm dev
 
 ## 🧪 Testing Checklist
 
-### Backend Tests
-- [ ] Direct Mode OFF: Regular submission works
-- [ ] Direct Mode ON: Direct submission works
-- [ ] Validation: Rejects >200 rows
-- [ ] Validation: Rejects >4000 char prompts
-- [ ] Validation: Forces styleOnly=true
+### Backend Tests ✅
+- [x] Direct Mode OFF: Regular submission works
+- [x] Direct Mode ON: Direct submission works
+- [x] Validation: Rejects >200 rows
+- [x] Validation: Rejects >4000 char prompts
+- [x] Validation: Forces styleOnly=true
 
 ### Frontend Tests
 - [ ] Mode toggle switches views
@@ -133,12 +133,12 @@ open http://127.0.0.1:5174
 
 ## 🎉 Done When
 
-1. ✅ Backend accepting Direct Mode requests
-2. ✅ Frontend shows mode toggle
-3. ✅ JSON editor validates and submits
-4. ✅ Job monitoring works for both modes
-5. ✅ All tests pass
-6. ✅ Documentation updated
+1. ✅ Backend accepting Direct Mode requests (COMPLETE)
+2. ⏳ Frontend shows mode toggle (Pending)
+3. ⏳ JSON editor validates and submits (Pending)
+4. ⏳ Job monitoring works for both modes (Pending)
+5. ⏳ All tests pass (Backend tests complete)
+6. ✅ Documentation updated (COMPLETE)
 
 ---
 

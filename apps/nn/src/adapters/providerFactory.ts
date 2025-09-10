@@ -65,6 +65,7 @@ export interface UnifiedProvider {
    * For sync: renders immediately and returns results
    */
   generate(req: {
+    jobId?: string;  // Optional job ID to use (if not provided, provider will generate one)
     rows: PromptRow[];
     variants: 1 | 2 | 3;
     styleOnly: boolean;
@@ -87,6 +88,7 @@ class BatchProviderWrapper implements UnifiedProvider {
   constructor(private adapter: AsyncImageGenProvider) {}
   
   async generate(req: {
+    jobId?: string;  // Optional job ID to use
     rows: PromptRow[];
     variants: 1 | 2 | 3;
     styleOnly: boolean;
@@ -125,6 +127,7 @@ class BatchProviderWrapper implements UnifiedProvider {
     
     // Live batch submission
     const job = await this.adapter.submit({
+      jobId: req.jobId,  // Pass optional jobId to adapter
       rows: req.rows,
       variants: req.variants,
       styleOnly: true, // Always enforce style-only

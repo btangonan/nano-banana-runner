@@ -13,8 +13,9 @@ export default async function fetchRoutes(fastify: FastifyInstance) {
   const QUERY_SCHEMA = z.object({
     jobId: z.string().uuid(),
     format: z.enum(['json', 'gallery', 'download']).default('json'),
-    limit: z.number().int().min(1).max(100).optional(),
-    offset: z.number().int().min(0).optional(),
+    // Coerce strings to numbers since query params arrive as strings
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    offset: z.coerce.number().int().min(0).default(0),
   }).strict();
 
   fastify.get('/ui/fetch', async (request, reply) => {

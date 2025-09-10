@@ -1,6 +1,8 @@
 import { request } from "undici";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
+import { join } from "node:path";
+import { existsSync } from "node:fs";
 
 export type SubmitReq = {
   jobId?: string;                 // optional client-provided id
@@ -18,7 +20,7 @@ export type PollRes = {
   errors?: any[] 
 };
 export type FetchRes = { 
-  results: Array<{ id: string; prompt: string; outUrl?: string }>; 
+  results: Array<{ id: string; prompt: string; outUrl?: string; filepath?: string }>; 
   problems: any[] 
 };
 
@@ -27,7 +29,7 @@ const jobs = new Map<string, {
   status: PollRes["status"];
   completed: number;
   total: number;
-  results: Array<{ id: string; prompt: string; outUrl?: string }>;
+  results: Array<{ id: string; prompt: string; outUrl?: string; filepath?: string }>;
   problems: any[];
   errors?: any[];
 }>();
@@ -37,6 +39,7 @@ export class GeminiBatchClient {
 
   // Submit individual image generation requests (no real batch API exists)
   async submit(req: SubmitReq): Promise<SubmitRes> {
+    // Use provided jobId if available, otherwise generate one
     const jobId = req.jobId ?? "job-" + Date.now();
     const totalImages = req.rows.length * req.variants;
     
@@ -107,6 +110,11 @@ export class GeminiBatchClient {
     if (!job) return;
 
     job.status = "running";
+    
+    // Create output directory for this job
+    const outputDir = join("./outputs", jobId);
+    await mkdir(outputDir, { recursive: true });
+    console.log(`Created output directory: ${outputDir}`);
 
     try {
       // Load and encode reference images to base64
@@ -133,11 +141,38 @@ export class GeminiBatchClient {
             const result = await this.generateSingleImage(row, styleRefsBase64);
             const resultId = `${i}-${v}`;
             
-            job.results.push({
-              id: resultId,
-              prompt: row.prompt,
-              outUrl: result.outUrl
-            });
+            // Save the generated image to disk
+            if (result.outUrl && result.outUrl.startsWith('data:')) {
+              const filename = `image_${i}_variant_${v}.png`;
+              const filepath = join(outputDir, filename);
+              
+              // Extract base64 data from data URL
+              const base64Data = result.outUrl.split(',')[1];
+              if (base64Data) {
+                await writeFile(filepath, Buffer.from(base64Data, 'base64'));
+                console.log(`Saved image to: ${filepath}`);
+                
+                // Update result to include file path (keeping data URL for backward compat)
+                job.results.push({
+                  id: resultId,
+                  prompt: row.prompt,
+                  outUrl: result.outUrl,
+                  filepath: filepath
+                });
+              } else {
+                job.results.push({
+                  id: resultId,
+                  prompt: row.prompt,
+                  outUrl: result.outUrl
+                });
+              }
+            } else {
+              job.results.push({
+                id: resultId,
+                prompt: row.prompt,
+                outUrl: result.outUrl
+              });
+            }
             job.completed++;
             
           } catch (error) {

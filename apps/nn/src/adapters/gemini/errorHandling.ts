@@ -87,8 +87,6 @@ export function createVertexError(
  * @returns Categorized Problem+JSON error
  */
 export async function parseVertexError(error: any): Promise<ProblemDetails> {
-  const log = createOperationLogger('parseVertexError');
-  
   // Check if the error response is HTML (non-JSON)
   if (error?.response && typeof error.response === 'string') {
     const responseStr = error.response.toString();

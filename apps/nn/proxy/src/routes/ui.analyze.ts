@@ -12,7 +12,8 @@ import type { ImageDescriptor } from "../../../src/types.js";
 export default async function analyzeRoutes(fastify: FastifyInstance) {
   const REQUEST_SCHEMA = z.object({
     inDir: z.string().default('./images'),
-    concurrency: z.number().int().min(1).max(10).default(4),
+    // Coerce to number in case it comes as string from forms
+    concurrency: z.coerce.number().int().min(1).max(10).default(4),
   }).strict();
 
   fastify.post('/ui/analyze', async (request, reply) => {

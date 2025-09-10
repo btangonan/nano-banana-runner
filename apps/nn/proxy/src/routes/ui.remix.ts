@@ -12,8 +12,9 @@ import type { PromptRow } from "../../../src/types.js";
 export default async function remixRoutes(fastify: FastifyInstance) {
   const REQUEST_SCHEMA = z.object({
     descriptorsPath: z.string().default('./artifacts/descriptors.json'),
-    maxPerImage: z.number().int().min(1).max(100).default(10),
-    seed: z.number().int().default(42),
+    // Coerce to number in case it comes as string from forms
+    maxPerImage: z.coerce.number().int().min(1).max(100).default(10),
+    seed: z.coerce.number().int().default(42),
   }).strict();
 
   fastify.post('/ui/remix', async (request, reply) => {

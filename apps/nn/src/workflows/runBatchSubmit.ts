@@ -38,6 +38,7 @@ function computePromptsHash(prompts: PromptRow[]): string {
 }
 
 interface BatchSubmitOptions {
+  jobId?: string;                  // Optional job ID to use throughout the workflow
   provider?: ProviderName;        // per-job override (optional)
   promptsPath: string;
   styleDir?: string;
@@ -197,6 +198,7 @@ export async function runBatchSubmit(opts: BatchSubmitOptions): Promise<void> {
     
     // Submit job using provider factory
     const result = await provider.generate({
+      jobId: opts.jobId,  // Pass the optional jobId to the provider
       rows,
       variants: opts.variants,
       styleOnly: true,

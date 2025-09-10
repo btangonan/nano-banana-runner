@@ -70,6 +70,14 @@ export const AnalyzeResponse = z.object({
 export type AnalyzeRequest = z.infer<typeof AnalyzeRequest>;
 export type AnalyzeResponse = z.infer<typeof AnalyzeResponse>;
 
+// Clear session API schemas
+export const ClearResponse = z.object({
+  cleared: z.boolean(),
+  message: z.string().optional(),
+}).strict();
+
+export type ClearResponse = z.infer<typeof ClearResponse>;
+
 // Prompt Row (matches backend PromptRowSchema)
 export const PromptRow = z.object({
   prompt: z.string().min(1).max(2000),
@@ -277,6 +285,7 @@ export type PollResponse = z.infer<typeof PollResponse>;
 export const FetchRequest = z.object({
   jobId: z.string().uuid(),
   format: z.enum(['json', 'gallery', 'download']).default('json'),
+  // Numbers in query params are handled on the server side
   limit: z.number().int().min(1).max(100).optional(),
   offset: z.number().int().min(0).optional(),
 }).strict();
