@@ -78,6 +78,8 @@ export function Gallery({ jobId: propJobId, onNext, onBack, toast }: GalleryProp
     enabled: !!jobId,
     refetchInterval: false,
     retry: 1,
+    staleTime: 0,  // Don't cache results
+    gcTime: 0,      // Remove from cache immediately
   })
 
   // Filter items based on search and type filter
@@ -97,6 +99,14 @@ export function Gallery({ jobId: propJobId, onNext, onBack, toast }: GalleryProp
   console.log('[Gallery] Raw items:', rawItems)
   console.log('[Gallery] Search term:', searchTerm, 'Type filter:', typeFilter)
   console.log('[Gallery] Filtered items:', filteredItems)
+  
+  // Force refetch when component mounts with a jobId
+  useEffect(() => {
+    if (jobId && refetch) {
+      console.log('[Gallery] Force refetching for jobId:', jobId)
+      refetch()
+    }
+  }, [jobId])
 
   // Get unique types for filter dropdown
   const availableTypes = data?.results && 'items' in data.results
