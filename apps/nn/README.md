@@ -1,6 +1,6 @@
 # Nano Banana Runner (nn)
 
-Style-transfer-safe batch image generation using Gemini Batch API (primary) with comprehensive guardrails and Vertex AI fallback.
+Style-transfer-safe batch image generation using Gemini Batch API with comprehensive guardrails and intelligent provider architecture.
 
 ## Features
 
@@ -9,14 +9,14 @@ Style-transfer-safe batch image generation using Gemini Batch API (primary) with
 - **Style-only image generation** with perceptual hash validation
 - **Resumable jobs** with manifest tracking
 - **Secure API key handling** via proxy service
-- **Vertex AI fallback** for synchronous operations
+- **Provider flexibility** for different use cases
 - **CLI safety**: --dry-run defaults, --live --yes confirmation
-- **Provider factory** with unified interface (batch/vertex/mock)
+- **Provider factory** with unified interface (batch/sharp/gemini/mock)
 - **Debug mode** with request/response logging
 
 ## Prerequisites
 
-1. **Google Cloud Project** with Vertex AI API enabled
+1. **Google Cloud Project** (optional, for advanced features)
 2. **Application Default Credentials (ADC)** configured
 3. **Node.js 20+** and pnpm
 
@@ -42,7 +42,7 @@ pnpm run dev
 # Proxy now running on http://127.0.0.1:8787
 ```
 
-### 3. Configure Google Cloud (for Vertex fallback)
+### 3. Configure Google Cloud (Optional)
 ```bash
 # Set your project
 gcloud config set project YOUR_PROJECT_ID
@@ -50,7 +50,7 @@ gcloud config set project YOUR_PROJECT_ID
 # Authenticate with ADC
 gcloud auth application-default login
 
-# Enable Vertex AI
+# Enable required APIs
 gcloud services enable aiplatform.googleapis.com
 ```
 
@@ -59,7 +59,7 @@ gcloud services enable aiplatform.googleapis.com
 # Check proxy health
 curl http://127.0.0.1:8787/healthz
 
-# Verify Vertex connectivity (optional, for fallback)
+# Verify connectivity (optional)
 nn probe
 ```
 
@@ -110,10 +110,10 @@ Cancel a running batch job.
 nn batch cancel --job JOB_ID
 ```
 
-### Vertex AI Commands (Fallback)
+### Additional Commands
 
 #### `nn probe`
-Verify Vertex AI connectivity and model availability. Creates a 24-hour cache file to prevent accidental API calls.
+Verify API connectivity and model availability. Creates a 24-hour cache file to prevent accidental API calls.
 
 ```bash
 nn probe
@@ -154,7 +154,8 @@ Options:
 ## Environment Variables
 
 ### Batch Relay (Primary)
-- `NN_PROVIDER`: Provider selection (default: 'batch', options: 'batch'|'vertex'|'mock')
+- `NN_PROVIDER`: Provider selection (default: 'batch', options: 'batch'|'mock')
+- `NN_ANALYZE_PROVIDER`: Analysis provider (default: 'sharp', options: 'sharp'|'gemini')
 - `BATCH_PROXY_URL`: Batch relay URL (default: http://127.0.0.1:8787)
 - `GEMINI_BATCH_API_KEY`: API key for proxy (set in proxy/.env, never in CLI)
 - `BATCH_MAX_BYTES`: Batch size limit (default: 100MB)
@@ -222,7 +223,7 @@ When Vertex AI is requested but unavailable (missing credentials, entitlement is
 ./scripts/smoke_batch.sh
 
 # Check logs for provider confirmation
-nn render --dry-run 2>&1 | grep -i "provider\|batch\|vertex"
+nn analyze --in ./images 2>&1 | grep -i "provider\|sharp\|gemini"
 ```
 
 ## Safety Features
@@ -243,11 +244,68 @@ Perceptual hash validation prevents generating exact copies:
 ### Debug Mode
 Enable request/response logging for troubleshooting:
 ```bash
-NN_DEBUG_VERTEX=1 nn render --live --yes
-# Logs saved to debug/vertex-*.json with redacted sensitive data
+NN_DEBUG=1 nn analyze --in ./images
+# Debug output shows provider selection and API calls
 ```
 
 ## Testing
+
+### E2E Testing Infrastructure (NEW)
+
+#### Cassette-Based Testing with 4 Modes
+The project uses a sophisticated record/replay pattern for E2E testing that reduces API costs by 90%+ while maintaining reliability:
+
+```bash
+# Record mode - Capture API responses (run once)
+E2E_MODE=record pnpm test:e2e
+
+# Replay mode - Use saved cassettes (DEFAULT for PRs, no API calls)
+E2E_MODE=replay pnpm test:e2e
+
+# Live mode - Real API calls with budget tracking
+E2E_MODE=live E2E_BUDGET_USD=1.00 pnpm test:e2e
+
+# Mock mode - Use existing mocks
+E2E_MODE=mock pnpm test:e2e
+```
+
+**Key Features:**
+- **Deterministic**: Same inputs always produce same cassette keys
+- **Budget Safe**: Automatic cost tracking and enforcement
+- **Offline Capable**: Run full E2E suite without API keys in replay mode
+- **Version Aware**: Cassettes tagged with API version, auto-invalidate on changes
+
+#### Environment Configuration
+```bash
+# E2E Test Environment Variables
+E2E_MODE=replay                     # Testing mode (default: mock)
+E2E_BUDGET_USD=0.50                 # Max spend per test run
+E2E_CASSETTES_DIR=test/e2e/fixtures/recordings
+E2E_VERSION_TAG=gemini-2.5-flash-image-preview@2025-09
+```
+
+### Image Preprocessing (413 Error Fix)
+Large images (4-5MB) are automatically preprocessed to avoid proxy payload limits:
+
+```typescript
+import { preprocessForGemini } from './test/e2e/utils/image-preprocessor';
+
+// Smart compression: PNG for line art, WebP for photos
+const processed = await preprocessForGemini(largeImage);
+// Result: <900KB optimized image
+```
+
+### Unit & Integration Tests
+```bash
+# Run all tests
+pnpm test
+
+# Run with coverage
+pnpm test:coverage
+
+# Watch mode for development
+pnpm test:watch
+```
 
 ### Gated Live Test
 Single-shot validation with explicit confirmation:
@@ -270,7 +328,7 @@ node scripts/calibrate-guard.js calibration
 
 ### Security Architecture
 - **Proxy-based API management**: Keys server-side only, never exposed to CLI
-- **ADC fallback**: Vertex AI uses Application Default Credentials (when enabled)
+- **Proxy security**: API keys never leave the server, accessed via secure proxy
 - **Redacted logging**: No sensitive data in logs
 
 ### Batch Guardrails
@@ -287,8 +345,8 @@ node scripts/calibrate-guard.js calibration
 3. Post-generation perceptual hash validation
 
 ### Provider Factory Pattern
-- **Unified interface**: Abstract async batch vs sync vertex differences
-- **Automatic selection**: Batch (primary) → Vertex (fallback) → Mock (testing)
+- **Unified interface**: Abstract batch generation vs real-time analysis differences  
+- **Intelligent provider selection**: Sharp (fast local) ↔ Gemini (AI-powered) based on configuration
 - **Result handling**: Batch jobs vs direct results seamlessly managed
 
 ## Troubleshooting
@@ -300,7 +358,7 @@ Run `nn probe` first to verify connectivity.
 Set your project: `gcloud config set project YOUR_PROJECT_ID`
 
 ### "Permission denied" errors
-Ensure your account has Vertex AI permissions:
+For advanced features, ensure your account has required permissions:
 ```bash
 gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
   --member="user:YOUR_EMAIL" \
@@ -309,7 +367,7 @@ gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
 
 ### Debug API calls
 ```bash
-NN_DEBUG_VERTEX=1 nn probe
+NN_DEBUG=1 nn probe
 # Check debug/*.json for request/response details
 ```
 

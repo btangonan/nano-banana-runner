@@ -1,0 +1,13 @@
+{
+  "jobId": "test-job-123",
+  "rows": [
+    {
+      "prompt": "A serene zen garden with carefully raked sand patterns, moss-covered stones, and a small wooden bridge over a koi pond, soft morning light filtering through bamboo",
+      "seed": 42,
+      "tags": ["zen", "garden", "peaceful"]
+    }
+  ],
+  "variants": 1,
+  "styleOnly": true,
+  "styleRefs": []
+}

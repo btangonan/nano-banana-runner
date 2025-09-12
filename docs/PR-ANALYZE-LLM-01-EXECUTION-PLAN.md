@@ -95,17 +95,17 @@ graph TD
    export default async function analyzeRoutes(app: FastifyInstance) {
      app.post('/analyze/describe', async (req, reply) => {
        // Validate request
-       // Call Gemini 1.5 Pro Vision API
+       // Call Gemini Batch API for image analysis
        // Return structured ImageDescriptor
      });
    }
    ```
 
 #### Testing:
-- Mock Gemini API responses
+- Mock Gemini Batch API responses
 - Test error handling (429, 503, timeout)
 - Validate ImageDescriptor schema
-- E2E test with real API (CI only)
+- E2E test with real Batch API (CI only)
 
 #### Rollback Strategy:
 - Feature flag: `NN_ANALYZE_PROVIDER=sharp`
@@ -138,8 +138,8 @@ graph TD
    export const envSchema = z.object({
      // ... existing
      NN_ANALYZE_PROVIDER: z.enum(['sharp', 'gemini']).default('sharp'),
-     GEMINI_VISION_MODEL: z.string().default('gemini-1.5-pro-vision'),
-     GEMINI_VISION_CACHE_TTL: z.number().default(3600),
+     BATCH_PROXY_URL: z.string().default('http://127.0.0.1:8787'),
+     NN_ANALYZE_CACHE_ENABLED: z.boolean().default(true),
    });
    ```
 
@@ -258,17 +258,17 @@ NN_ANALYZE_PROVIDER=sharp
 
 # Opt-in to Gemini provider
 NN_ANALYZE_PROVIDER=gemini
-GEMINI_VISION_MODEL=gemini-1.5-pro-vision
-GEMINI_VISION_CACHE_TTL=3600
+BATCH_PROXY_URL=http://127.0.0.1:8787
+NN_ANALYZE_CACHE_ENABLED=true
 ```
 
 ### Production Deployment
 ```bash
 # Gradual rollout with feature flag
 NN_ANALYZE_PROVIDER=sharp  # Start with Sharp
-NN_GEMINI_ROLLOUT_PERCENT=10  # 10% get Gemini
-NN_GEMINI_CACHE_ENABLED=true
-NN_GEMINI_CACHE_TTL=86400  # 24 hour cache
+NN_ANALYZE_ROLLOUT_PERCENT=10  # 10% get Gemini
+NN_ANALYZE_CACHE_ENABLED=true
+BATCH_PROXY_URL=https://your-proxy-domain.com
 ```
 
 ## Success Metrics
@@ -424,10 +424,10 @@ interface ImageDescriptor {
 ## Appendix C: Cost Estimation
 
 ### API Pricing (as of 2025-09-10)
-- Gemini 1.5 Pro Vision: $0.002 per image
+- Gemini Batch API: $0.00125 per image (batch discount)
 - Average images per session: 50
-- Cost per session: $0.10
-- Monthly estimate (1000 sessions): $100
+- Cost per session: $0.06
+- Monthly estimate (1000 sessions): $60
 
 ### Cost Optimization
 1. **Caching**: 80% cache hit rate = 80% cost reduction

@@ -87,8 +87,20 @@ pnpm lint            # Run linter
 
 # Testing
 pnpm test            # Run unit tests
-pnpm test:e2e        # Run E2E tests
 pnpm test:coverage   # Generate coverage report
+pnpm test:watch      # Watch mode for development
+
+# E2E Testing (4 modes)
+E2E_MODE=record pnpm test:e2e     # Record API responses (create cassettes)
+E2E_MODE=replay pnpm test:e2e     # Replay from cassettes (no API calls)
+E2E_MODE=live pnpm test:e2e       # Live API calls (tracks costs)
+E2E_MODE=mock pnpm test:e2e       # Use mocks only
+
+# E2E with budget control
+E2E_MODE=live E2E_BUDGET_USD=1.00 pnpm test:e2e
+
+# Gated live test (requires confirmation)
+node test/live/gated-test.js --yes
 
 # Building
 pnpm build           # Build for production
@@ -164,6 +176,13 @@ USE_REFACTORED_GEMINI=false    # Modularized gemini adapter
 USE_COMPUTED_HASH=false        # Deterministic hash computation
 USE_MODEL_TAGGER=false         # ML-based image tagging
 USE_STRUCTURED_LOGGING=false   # Structured logging
+
+# E2E Testing Environment (NEW)
+E2E_MODE=replay                # mock|live|record|replay
+E2E_BUDGET_USD=0.50           # Max spend per test run
+E2E_CASSETTES_DIR=test/e2e/fixtures/recordings
+E2E_VERSION_TAG=gemini-2.5-flash-image-preview@2025-09
+E2E_COST_REPORT_PATH=test/e2e/.artifacts/cost.json
 ```
 
 ## Troubleshooting

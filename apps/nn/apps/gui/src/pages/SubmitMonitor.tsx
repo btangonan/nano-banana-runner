@@ -170,8 +170,8 @@ export function SubmitMonitor({ onNext, onBack, toast }: SubmitMonitorProps) {
     return uiProvider === 'batch' ? 'gemini-batch' : 'vertex-ai'
   }
   
-  const mapProviderToSubmit = (uiProvider: 'batch' | 'vertex'): 'batch' | 'vertex' => {
-    return uiProvider // Submit API uses the same values as UI
+  const mapProviderToSubmit = (uiProvider: 'batch' | 'vertex'): 'gemini-batch' | 'vertex-ai' => {
+    return uiProvider === 'batch' ? 'gemini-batch' : 'vertex-ai'
   }
 
   // Handlers
@@ -455,12 +455,12 @@ export function SubmitMonitor({ onNext, onBack, toast }: SubmitMonitorProps) {
                           <Eye className="w-4 h-4" />
                           View Gallery
                         </Button>
-                        <Button variant="outline" asChild>
-                          <a href={jobState.pollData.actions.fetchResults} className="flex items-center gap-2">
+                        <a href={jobState.pollData.actions.fetchResults}>
+                          <Button variant="outline" className="flex items-center gap-2">
                             <Download className="w-4 h-4" />
                             Download Results
-                          </a>
-                        </Button>
+                          </Button>
+                        </a>
                       </div>
                     )}
                   </>

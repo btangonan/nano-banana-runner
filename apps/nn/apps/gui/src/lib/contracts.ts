@@ -13,14 +13,16 @@ export type Problem = z.infer<typeof Problem>;
 
 // Image Descriptor (matches backend ImageDescriptorSchema)
 export const Descriptor = z.object({
+  provider: z.string().optional(), // 'sharp' or 'gemini'
   path: z.string(),
   hash: z.string(),
   width: z.number().positive(),
   height: z.number().positive(),
+  format: z.string().optional(), // 'png', 'jpeg', 'webp', etc.
   palette: z.array(z.string()).max(10),
   subjects: z.array(z.string()),
   style: z.array(z.string()),
-  lighting: z.array(z.string()),
+  lighting: z.union([z.string(), z.array(z.string())]), // Can be string or array
   camera: z.object({
     lens: z.string().optional(),
     f: z.number().positive().optional(),

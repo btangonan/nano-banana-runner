@@ -9,7 +9,7 @@ import { env } from '../config/env.js';
 import { createOperationLogger } from '../logger.js';
 import { GeminiBatchAdapter } from './geminiBatch.js';
 import { GeminiImageAdapter } from './geminiImage.js';
-import { MockImageAdapter } from './mockImage.js';
+// import { MockImageAdapter } from './mockImage.js'; // Unused in current implementation
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 

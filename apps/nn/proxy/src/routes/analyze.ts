@@ -318,13 +318,13 @@ export default async function analyzeRoutes(app: FastifyInstance) {
       }
       
       // Get API key from environment
-      const apiKey = process.env.GEMINI_BATCH_API_KEY;
+      const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
         return reply.status(500).send(createProblemResponse(
           'configuration_error',
           'Gemini API key not configured',
           500,
-          'Missing GEMINI_BATCH_API_KEY environment variable',
+          'Missing GEMINI_API_KEY environment variable',
           false,
           0
         ));

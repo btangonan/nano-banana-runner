@@ -5,9 +5,7 @@ import type {
   ImageDescriptor, 
   ProviderConfig, 
   CostEstimate,
-  ProviderMetrics,
-  AnalyzeError,
-  ANALYZE_ERROR_TYPES
+  ProviderMetrics
 } from './types.js';
 
 /**
@@ -52,7 +50,7 @@ export class GeminiProvider implements AnalyzeProvider {
       retries: 3,
       backoffMs: [200, 400, 800],
       costPerImage: 0.0025, // Gemini 1.5 Pro Vision base rate
-      proxyUrl: process.env.BATCH_PROXY_URL || 'http://127.0.0.1:8787',
+      proxyUrl: process.env['BATCH_PROXY_URL'] || 'http://127.0.0.1:8787',
       model: 'gemini-1.5-pro-vision-latest',
       chunkSize: 16, // Process max 16 images per chunk
       ...config,
@@ -101,7 +99,7 @@ export class GeminiProvider implements AnalyzeProvider {
    */
   private async callProxy(
     imageBuffer: Buffer, 
-    path: string,
+    _path: string,
     dryRun: boolean = false
   ): Promise<ProxyResponse> {
     const base64Image = imageBuffer.toString('base64');
@@ -127,7 +125,7 @@ export class GeminiProvider implements AnalyzeProvider {
         });
         
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
+          const errorData = await response.json().catch(() => ({})) as any;
           
           // Handle specific error types
           if (response.status === 429) {
@@ -141,7 +139,7 @@ export class GeminiProvider implements AnalyzeProvider {
           throw new Error(`HTTP ${response.status}: ${errorData.title || 'Unknown error'}`);
         }
         
-        return await response.json();
+        return await response.json() as ProxyResponse;
         
       } catch (error) {
         if (attempt === this.config.retries - 1) {
@@ -166,15 +164,15 @@ export class GeminiProvider implements AnalyzeProvider {
   /**
    * Analyze a single image using Gemini Vision API
    */
-  async analyze(path: string, buffer: Buffer): Promise<ImageDescriptor> {
+  async analyze(_path: string, buffer: Buffer): Promise<ImageDescriptor> {
     const startTime = Date.now();
     this.metrics.requestsTotal++;
     
     try {
-      this.log.debug({ path, size: buffer.length }, 'Starting Gemini analysis');
+      this.log.debug({ path: _path, size: buffer.length }, 'Starting Gemini analysis');
       
       // Call proxy endpoint
-      const response = await this.callProxy(buffer, path, false);
+      const response = await this.callProxy(buffer, _path, false);
       
       if (response.error) {
         this.metrics.failuresTotal++;
@@ -190,7 +188,7 @@ export class GeminiProvider implements AnalyzeProvider {
       // Update descriptor with client-side info
       const descriptor: ImageDescriptor = {
         ...response.descriptor,
-        path,
+        path: _path,
         hash: createHash('sha256').update(buffer).digest('hex'),
       };
       
@@ -205,12 +203,12 @@ export class GeminiProvider implements AnalyzeProvider {
       
     } catch (error) {
       this.metrics.failuresTotal++;
-      this.log.error({ error, path }, 'Gemini analysis failed');
+      this.log.error({ error, path: _path }, 'Gemini analysis failed');
       
       // Return partial descriptor with error
       return {
         provider: 'gemini',
-        path,
+        path: _path,
         hash: createHash('sha256').update(buffer).digest('hex'),
         width: 1,
         height: 1,

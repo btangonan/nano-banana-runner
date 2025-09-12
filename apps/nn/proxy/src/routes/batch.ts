@@ -16,10 +16,10 @@ const SubmitSchema = z.object({
 }).strict();
 
 export default async function batchRoutes(app: FastifyInstance) {
-  const apiKey = app.config.GEMINI_BATCH_API_KEY;
+  const apiKey = app.config.GEMINI_API_KEY;
   
   if (!apiKey && app.config.NODE_ENV !== "development") {
-    app.log.warn("No GEMINI_BATCH_API_KEY set. In production, mount a Secret Manager fetch.");
+    app.log.warn("No GEMINI_API_KEY set. In production, mount a Secret Manager fetch.");
   }
   
   const client = new GeminiBatchClient(apiKey ?? "DEV-KEY");

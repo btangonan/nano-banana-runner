@@ -523,20 +523,86 @@ const styleOnlyPrefix = {
 
 ## Testing Strategy
 
+### E2E Testing Infrastructure (NEW - 2025-09-12)
+
+#### Cassette-Based Deterministic Testing
+The new E2E testing system uses a **record/replay pattern** that reduces API costs by 90%+ while maintaining test reliability:
+
+**4-Mode Test Adapter** (`test/e2e/adapters/dual-mode.adapter.ts`):
+- **mock**: Uses existing mocks, validates against schema
+- **live**: Calls real Gemini API with budget tracking
+- **record**: Calls API once, saves response as cassette
+- **replay**: Uses saved cassettes, no API calls (DEFAULT for PRs)
+
+**Key Features**:
+- Deterministic cassette keys: `SHA256(VERSION_TAG + normalized_request)`
+- Automatic budget enforcement: Fails when exceeding `E2E_BUDGET_USD`
+- Schema validation: All modes validate against same Zod schema
+- Cost tracking: Generates `cost.json` for CI budget gates
+
+#### Environment Configuration
+```bash
+# E2E Testing Environment Variables
+E2E_MODE=replay                     # mock|live|record|replay (default: mock)
+E2E_BUDGET_USD=0.50                 # Max spend per test run (default: 0.50)
+E2E_CASSETTES_DIR=test/e2e/fixtures/recordings  # Cassette storage
+E2E_VERSION_TAG=gemini-2.5-flash-image-preview@2025-09  # API version
+E2E_COST_REPORT_PATH=test/e2e/.artifacts/cost.json  # Cost tracking
+```
+
+#### Running E2E Tests
+```bash
+# Record cassettes (run once to capture API responses)
+E2E_MODE=record pnpm test:e2e
+
+# Replay cassettes (default for PRs - no API calls)
+E2E_MODE=replay pnpm test:e2e
+
+# Live testing (uses real API, tracks costs)
+E2E_MODE=live E2E_BUDGET_USD=1.00 pnpm test:e2e
+
+# Mock testing (uses existing mocks)
+E2E_MODE=mock pnpm test:e2e
+```
+
+#### Adaptive Image Preprocessing
+Solves the 413 "Payload Too Large" errors for Gemini Vision:
+
+**Smart Preprocessing** (`test/e2e/utils/image-preprocessor.ts`):
+- Images <300KB pass through unchanged
+- PNG preserved for line art/diagrams
+- WebP used for photos (better compression)
+- Progressive quality reduction: 85% → 60%
+- Target: 900KB (safe margin under 1MB proxy limit)
+- SSIM validation ensures quality preservation
+
+```typescript
+// Example usage
+import { preprocessForGemini } from './test/e2e/utils/image-preprocessor';
+
+const processed = await preprocessForGemini(largeImage, {
+  maxSizeBytes: 900 * 1024,
+  preserveFormat: false
+});
+// Result: Optimally compressed image that won't trigger 413 errors
+```
+
 ### Unit Tests (Priority)
 - Pure functions: `normalize()`, `simhash()`, `jaccard()`
 - Adapters with mocks: `geminiImage`, `mockImage`
 - Workflows with stubs: `runAnalyze`, `runRemix`
 
 ### Integration Tests
+- Proxy endpoints with mock batch API
 - CSV round-trip fidelity
 - Dedupe accuracy
-- API validation
+- API contract validation
 
-### E2E Tests
-- Full pipeline: analyze → remix → render
-- GUI workflows: edit → export → render
-- Cost controls: dry-run → live
+### E2E Test Execution Strategy
+- **PRs**: Replay mode only (free, deterministic)
+- **Nightly**: Record mode to refresh cassettes
+- **Release**: Live mode with full validation
+- **Cost Cap**: $30/month total E2E budget
 
 ## Performance Targets
 - Export 1k prompts: <300ms ✅
@@ -614,6 +680,18 @@ pnpm test:e2e     # End-to-end tests
 
 ### Issue: Slow analysis
 **Fix**: Reduce image size for palette extraction
+
+### Issue: Gemini Vision 413 "Payload Too Large" (RESOLVED)
+**Cause**: Images 4-5MB exceed proxy body limit after base64 encoding (+33% size)
+**Fix**: Use adaptive preprocessing before sending to API:
+```typescript
+import { preprocessForGemini } from './test/e2e/utils/image-preprocessor';
+
+// Automatically handles large images
+const processed = await preprocessForGemini(largeImage);
+// Smart compression: PNG for line art, WebP for photos
+// Target: <900KB while preserving visual quality
+```
 
 ### Issue: "Could not process image" error in Claude
 **Cause**: Truncating base64 image data (e.g., using `head -c 50`)

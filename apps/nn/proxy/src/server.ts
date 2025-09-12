@@ -11,6 +11,7 @@ import batchRoutes from "./routes/batch.js";
 import staticRoutes from "./routes/ui.static.js";
 import uploadRoutes from "./routes/ui.upload.js";
 import analyzeRoutes from "./routes/ui.analyze.js";
+import geminiAnalyzeRoutes from "./routes/analyze.js";  // Gemini Vision API endpoint
 import clearRoutes from "./routes/ui.clear.js";
 import remixRoutes from "./routes/ui.remix.js";
 import savePromptsRoutes from "./routes/ui.savePrompts.js";
@@ -129,6 +130,7 @@ async function main() {
   await app.register(uploadRoutes);
   await app.register(clearRoutes);
   await app.register(analyzeRoutes);
+  await app.register(geminiAnalyzeRoutes);  // Register Gemini Vision API endpoints
   await app.register(remixRoutes);
   await app.register(savePromptsRoutes);
   await app.register(preflightRoutes);

@@ -38,7 +38,7 @@ describe('Analyze Route', () => {
     await app.register(analyzeRoutes);
     
     // Set required environment variable
-    process.env.GEMINI_BATCH_API_KEY = 'test-api-key';
+    process.env.GEMINI_API_KEY = 'test-api-key';
     
     // Clear mocks
     vi.clearAllMocks();
@@ -47,7 +47,7 @@ describe('Analyze Route', () => {
   afterEach(async () => {
     await app.close();
     vi.restoreAllMocks();
-    delete process.env.GEMINI_BATCH_API_KEY;
+    delete process.env.GEMINI_API_KEY;
   });
 
   // Helper function to create test image (1x1 PNG)
@@ -169,7 +169,7 @@ describe('Analyze Route', () => {
     });
 
     it('should handle missing API key', async () => {
-      delete process.env.GEMINI_BATCH_API_KEY;
+      delete process.env.GEMINI_API_KEY;
 
       const response = await app.inject({
         method: 'POST',
