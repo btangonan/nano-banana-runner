@@ -180,7 +180,7 @@ async function callGeminiVision(
   isRetry: boolean = false
 ): Promise<any> {
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro-vision-latest" });
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
   
   const systemPrompt = isRetry ? STRICT_JSON_RETRY_PROMPT : DESCRIBE_IMAGE_SYSTEM_PROMPT;
   
@@ -401,7 +401,7 @@ export default async function analyzeRoutes(app: FastifyInstance) {
         ));
       }
       
-      // Create full ImageDescriptor
+      // Create full ImageDescriptor with field mapping for frontend compatibility
       const descriptor = {
         provider: 'gemini' as const,
         path: '', // Will be set by client
@@ -409,6 +409,10 @@ export default async function analyzeRoutes(app: FastifyInstance) {
         width: metadata.width,
         height: metadata.height,
         format: metadata.format,
+        // Map Gemini fields to expected frontend fields
+        palette: parsedResponse.colors || [],  // Frontend expects 'palette'
+        subjects: parsedResponse.objects || [], // Frontend expects 'subjects'
+        // Keep all original Gemini fields as well
         ...parsedResponse,
       };
       

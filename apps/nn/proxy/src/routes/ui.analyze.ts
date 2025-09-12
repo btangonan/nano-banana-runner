@@ -1,6 +1,8 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { runAnalyze } from "../../../src/workflows/runAnalyze.js";
+import { loadEnv } from "../../../src/config/env.js";
+import { resetProvider } from "../../../src/core/analyze.js";
 import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import type { ImageDescriptor } from "../../../src/types.js";
@@ -52,6 +54,19 @@ export default async function analyzeRoutes(fastify: FastifyInstance) {
         concurrency,
       }, 'Starting image analysis via API');
 
+      // Load environment configuration for CLI context
+      loadEnv();
+      
+      // Debug: Check environment variables after loading
+      fastify.log.info({
+        NN_ANALYZE_PROVIDER: process.env.NN_ANALYZE_PROVIDER,
+        GEMINI_API_KEY_SET: !!process.env.GEMINI_API_KEY,
+        CWD: process.cwd()
+      }, 'Environment loaded for analysis');
+      
+      // Reset provider cache to pick up new environment config
+      resetProvider();
+
       // Call existing runAnalyze workflow
       await runAnalyze({
         inDir,
@@ -69,7 +84,21 @@ export default async function analyzeRoutes(fastify: FastifyInstance) {
 
       // Get a sample of the first 3 successful descriptors for preview
       // Only include successfully analyzed images in the sample
-      const sample = successful.slice(0, 3);
+      // Include only fields that frontend schema expects, with defaults for optional fields
+      const sample = successful.slice(0, 3).map(descriptor => ({
+        provider: descriptor.provider,
+        path: descriptor.path,
+        hash: descriptor.hash,
+        width: descriptor.width,
+        height: descriptor.height,
+        format: descriptor.format,
+        palette: descriptor.palette || [],
+        subjects: descriptor.subjects || [],
+        // Frontend also expects these fields:
+        style: descriptor.style || [],  // Array of style descriptors
+        lighting: descriptor.lighting || 'unknown',  // String description of lighting
+        // Exclude Gemini-specific fields: objects, scene, composition, colors, qualityIssues, safetyTags, confidence
+      }));
 
       const duration = `${((Date.now() - startTime) / 1000).toFixed(1)}s`;
 

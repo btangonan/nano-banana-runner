@@ -12,6 +12,7 @@ import staticRoutes from "./routes/ui.static.js";
 import uploadRoutes from "./routes/ui.upload.js";
 import analyzeRoutes from "./routes/ui.analyze.js";
 import geminiAnalyzeRoutes from "./routes/analyze.js";  // Gemini Vision API endpoint
+import cinematicAnalyzeRoutes from "./routes/analyze-cinematic.js";  // Cinematic Gemini Vision API
 import clearRoutes from "./routes/ui.clear.js";
 import remixRoutes from "./routes/ui.remix.js";
 import savePromptsRoutes from "./routes/ui.savePrompts.js";
@@ -29,7 +30,10 @@ declare module "fastify" {
 
 async function main() {
   const env = loadEnv();
-  const app = fastify({ logger: log });
+  const app = fastify({ 
+    logger: log,
+    bodyLimit: 50 * 1024 * 1024 // 50MB max for JSON bodies (large base64 images)
+  });
   
   // Attach config for plugins
   app.decorate("config", env);
@@ -131,6 +135,7 @@ async function main() {
   await app.register(clearRoutes);
   await app.register(analyzeRoutes);
   await app.register(geminiAnalyzeRoutes);  // Register Gemini Vision API endpoints
+  await app.register(cinematicAnalyzeRoutes);  // Register Cinematic Gemini Vision API
   await app.register(remixRoutes);
   await app.register(savePromptsRoutes);
   await app.register(preflightRoutes);

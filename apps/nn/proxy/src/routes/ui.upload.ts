@@ -96,7 +96,7 @@ export default async function uploadRoutes(fastify: FastifyInstance) {
           
           if (clearedCount > 0) {
             fastify.log.info({ clearedCount }, 'Cleared existing image files');
-            warnings.push(`Cleared ${clearedCount} existing image(s) from upload directory`);
+            // Note: File clearing is intentional and successful - not a warning
           }
         } catch (clearError) {
           fastify.log.warn({ 
