@@ -11,7 +11,7 @@ import { createOperationLogger } from '../utils/logger.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
- * Cinematic descriptor schema for rich, production-grade descriptions
+ * Standard cinematic descriptor schema
  */
 const CinematicDescriptorSchema = z.object({
   path: z.string(),
@@ -78,12 +78,156 @@ const CinematicDescriptorSchema = z.object({
     camera: z.string(),
     motion: z.array(z.string()),
     looping: z.string(),
-    transitions: z.union([z.string(), z.array(z.string())])  // Can be string or array
+    transitions: z.union([z.string(), z.array(z.string())])
   }),
   
   negativeConstraints: z.array(z.string()),
   qualityNotes: z.array(z.string()),
   safetyTags: z.array(z.string()),
+  confidence: z.number()
+}).strict();
+
+/**
+ * Ultra-cinematic descriptor schema with full production fields
+ */
+const UltraCinematicDescriptorSchema = z.object({
+  path: z.string(),
+  hash: z.string(),
+  provider: z.literal('gemini'),
+  width: z.number(),
+  height: z.number(),
+  format: z.string(),
+  
+  title: z.string(),
+  narrative: z.string().optional(),
+  purpose: z.string(),
+  subject: z.string(),
+  actions: z.array(z.string()),
+  mood: z.array(z.string()),
+  
+  shot: z.object({
+    type: z.string(),
+    angle: z.string(),
+    lens: z.string(),
+    framing: z.string(),
+    aspectRatio: z.string(),
+    focalPoint: z.string().optional(),
+    depthOfField: z.string().optional()
+  }),
+  
+  camera: z.object({
+    model: z.string(),
+    settings: z.string(),
+    movement: z.string(),
+    motivation: z.string()
+  }).optional(),
+  
+  environment: z.object({
+    location: z.string(),
+    time: z.string().optional(),
+    weather: z.string().optional(),
+    surroundings: z.string(),
+    surface: z.string().optional(),
+    atmosphere: z.array(z.string()).optional(),
+    elevation: z.string().optional(),
+    soundscape: z.string().optional(),
+    temperature: z.string().optional()
+  }),
+  
+  lighting: z.object({
+    setup: z.string().optional(),
+    quality: z.string(),
+    colorTemp: z.string().optional(),
+    contrast: z.string(),
+    practicals: z.string().optional(),
+    shadows: z.string().optional(),
+    highlights: z.string().optional(),
+    timeOfDay: z.string().optional(),
+    direction: z.string().optional(),
+    color: z.string().optional(),
+    notes: z.string().optional()
+  }),
+  
+  color: z.object({
+    palette: z.object({
+      primary: z.array(z.string()),
+      secondary: z.array(z.string()),
+      accent: z.array(z.string())
+    }).optional(),
+    grading: z.object({
+      look: z.string(),
+      shadows: z.string().optional(),
+      midtones: z.string().optional(),
+      highlights: z.string().optional(),
+      saturation: z.string().optional()
+    }).optional(),
+    reference: z.string().optional()
+  }).optional(),
+  
+  // Fallback for standard schema compatibility
+  colors: z.object({
+    dominant: z.array(z.string()),
+    accents: z.array(z.string()),
+    palette: z.array(z.string()),
+    grading: z.string()
+  }).optional(),
+  
+  filmStock: z.string().optional(),
+  filmStockLike: z.string().optional(),
+  
+  style: z.array(z.string()),
+  
+  composition: z.object({
+    principles: z.array(z.string()),
+    leadingLines: z.string().optional(),
+    shapes: z.string().optional(),
+    balance: z.string(),
+    depth: z.string(),
+    horizon: z.string().optional(),
+    lines: z.array(z.string()).optional()
+  }),
+  
+  textures: z.array(z.string()),
+  objects: z.array(z.string()).optional(),
+  scene: z.string().optional(),
+  
+  production: z.object({
+    vfx: z.string().optional(),
+    stunts: z.string().optional(),
+    sfx: z.string().optional(),
+    props: z.string().optional()
+  }).optional(),
+  
+  videoHints: z.object({
+    duration: z.string().optional(),
+    motion: z.array(z.string()),
+    looping: z.string().optional(),
+    transitions: z.union([z.string(), z.array(z.string())]).optional(),
+    fps: z.string().optional(),
+    camera: z.string().optional()
+  }),
+  
+  narrative: z.object({
+    story: z.string(),
+    emotion: z.string(),
+    subtext: z.string(),
+    symbolism: z.string(),
+    foreshadowing: z.string()
+  }).optional(),
+  
+  postProduction: z.object({
+    edit: z.string(),
+    sound: z.string(),
+    music: z.string(),
+    colorSpace: z.string()
+  }).optional(),
+  
+  references: z.array(z.string()).optional(),
+  director_notes: z.string().optional(),
+  
+  negativeConstraints: z.array(z.string()),
+  qualityNotes: z.array(z.string()).optional(),
+  safetyTags: z.array(z.string()).optional(),
   confidence: z.number()
 }).strict();
 
@@ -176,7 +320,7 @@ async function callGeminiVision(
 /**
  * Parse and validate cinematic JSON response
  */
-function parseCinematicResponse(response: any, metadata: any): any {
+function parseCinematicResponse(response: any, metadata: any, isUltra: boolean = false): any {
   try {
     // Extract text from Gemini response structure
     const text = response.response?.text?.() || '';
@@ -197,8 +341,14 @@ function parseCinematicResponse(response: any, metadata: any): any {
     if (!parsed.format) parsed.format = metadata.format;
     if (!parsed.provider) parsed.provider = 'gemini';
     
-    // Validate against schema
-    return CinematicDescriptorSchema.parse(parsed);
+    // Handle filmStock/filmStockLike naming variations
+    if (parsed.filmStock && !parsed.filmStockLike) {
+      parsed.filmStockLike = parsed.filmStock;
+    }
+    
+    // Validate against appropriate schema
+    const schema = isUltra ? UltraCinematicDescriptorSchema : CinematicDescriptorSchema;
+    return schema.parse(parsed);
   } catch (error) {
     throw new Error(`Invalid JSON response: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
@@ -214,6 +364,9 @@ export default async function cinematicAnalyzeRoutes(app: FastifyInstance) {
     const startTime = Date.now();
     
     try {
+      // Check for ultra mode query parameter
+      const isUltra = (request.query as any)?.ultra === 'true';
+      
       // Validate request
       const body = DescribeRequestSchema.parse(request.body);
       const { image: base64Image, mimeType = 'image/jpeg' } = body;
@@ -234,7 +387,8 @@ export default async function cinematicAnalyzeRoutes(app: FastifyInstance) {
       log.info({ 
         originalSize: metadata.sizeBefore, 
         processedSize: metadata.sizeAfter,
-        compression: ((metadata.sizeBefore - metadata.sizeAfter) / metadata.sizeBefore * 100).toFixed(1) + '%'
+        compression: ((metadata.sizeBefore - metadata.sizeAfter) / metadata.sizeBefore * 100).toFixed(1) + '%',
+        ultra: isUltra
       }, 'Image preprocessed for cinematic analysis');
       
       // Get API key from environment
@@ -245,28 +399,32 @@ export default async function cinematicAnalyzeRoutes(app: FastifyInstance) {
         });
       }
       
-      // Path to cinematic prompt
-      const promptPath = join(__dirname, '../prompts/cinematic-descriptor.txt');
+      // Choose prompt file based on mode
+      const promptFile = isUltra ? 'cinematic-ultra.txt' : 'cinematic-descriptor.txt';
+      const promptPath = join(__dirname, '../prompts', promptFile);
       
-      // Call Gemini Vision API with cinematic prompt
+      // Use longer timeout for ultra mode (120s vs 60s)
+      const timeout = isUltra ? 120000 : 60000;
+      
+      // Call Gemini Vision API with appropriate prompt
       let geminiResponse: any;
       try {
-        geminiResponse = await callGeminiVision(processedBuffer, apiKey, promptPath);
+        geminiResponse = await callGeminiVision(processedBuffer, apiKey, promptPath, timeout);
       } catch (error) {
         if (error instanceof Error && error.message === 'Request timeout') {
           return reply.status(504).send({
-            error: 'Request timeout - description too complex'
+            error: `Request timeout - ${isUltra ? 'ultra-cinematic' : 'cinematic'} description too complex`
           });
         }
         throw error;
       }
       
-      // Parse and validate response
+      // Parse and validate response with appropriate schema
       let descriptor: any;
       try {
-        descriptor = parseCinematicResponse(geminiResponse, metadata);
+        descriptor = parseCinematicResponse(geminiResponse, metadata, isUltra);
       } catch (error) {
-        log.error({ error }, 'Failed to parse cinematic response');
+        log.error({ error, ultra: isUltra }, 'Failed to parse cinematic response');
         return reply.status(422).send({
           error: error instanceof Error ? error.message : 'Failed to parse response'
         });
@@ -282,10 +440,11 @@ export default async function cinematicAnalyzeRoutes(app: FastifyInstance) {
         latency, 
         imageSize: metadata.sizeAfter,
         title: descriptor.title,
-        purpose: descriptor.purpose
+        purpose: descriptor.purpose,
+        ultra: isUltra
       }, 'Cinematic analysis completed');
       
-      return reply.send({ descriptor });
+      return reply.send({ descriptor, ultra: isUltra });
       
     } catch (error) {
       log.error({ error }, 'Cinematic analyze request failed');

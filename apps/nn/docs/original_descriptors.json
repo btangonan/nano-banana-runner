@@ -1,0 +1,220 @@
+[
+  {
+    "provider": "gemini",
+    "path": "images/0c74d361_Screenshot 2025-09-07 at 12.41.37 PM.png",
+    "hash": "d0ba8584d776a43b0eb3b0251b414b418477f7346cb35a8ce85fb12847dd7dc7",
+    "width": 1536,
+    "height": 1016,
+    "format": "jpeg",
+    "palette": [
+      "#264653",
+      "#2a9d8f",
+      "#e9c46a",
+      "#f4a261",
+      "#e76f51",
+      "dark blue",
+      "black"
+    ],
+    "subjects": [
+      "person",
+      "cliff",
+      "mountains",
+      "snow",
+      "sky"
+    ],
+    "objects": [
+      "person",
+      "cliff",
+      "mountains",
+      "snow",
+      "sky"
+    ],
+    "scene": "A lone figure stands on a snow-covered cliff overlooking a vast, snow-covered mountain range under a twilight sky.",
+    "style": [
+      "dark",
+      "moody",
+      "atmospheric",
+      "minimalistic",
+      "cinematic",
+      "blue toned",
+      "grainy",
+      "film grain",
+      "photographic"
+    ],
+    "composition": "The image uses a rule of thirds composition, with the figure positioned to the left, creating a sense of isolation and vastness.",
+    "colors": [
+      "#264653",
+      "#2a9d8f",
+      "#e9c46a",
+      "#f4a261",
+      "#e76f51",
+      "dark blue",
+      "black"
+    ],
+    "lighting": "The lighting is dim and natural, suggesting either early morning or late evening.  The scene is primarily illuminated by ambient light.",
+    "qualityIssues": [
+      "grain",
+      "noise"
+    ],
+    "safetyTags": [],
+    "confidence": 0.95
+  },
+  {
+    "provider": "gemini",
+    "path": "images/164d2474_Screenshot 2025-09-07 at 12.43.25 PM.png",
+    "hash": "e590b3ae3880b31afd30cd7c5789912f8cb20a7f362f5d3fb9b8a821fa9f040a",
+    "width": 1536,
+    "height": 1165,
+    "format": "jpeg",
+    "palette": [
+      "#002040",
+      "#2E4050",
+      "#607080",
+      "dark green",
+      "grey"
+    ],
+    "subjects": [
+      "television",
+      "water",
+      "soccer players",
+      "football game",
+      "referee"
+    ],
+    "objects": [
+      "television",
+      "water",
+      "soccer players",
+      "football game",
+      "referee"
+    ],
+    "scene": "A submerged old television showing a soccer game floats in murky water.",
+    "style": [
+      "surreal",
+      "photorealistic",
+      "dark",
+      "moody",
+      "conceptual",
+      "slightly grainy"
+    ],
+    "composition": "The television is centrally positioned, partially submerged, creating a visual contrast between the screen's content and the surrounding water.",
+    "colors": [
+      "#002040",
+      "#2E4050",
+      "#607080",
+      "dark green",
+      "grey"
+    ],
+    "lighting": "Low-key lighting, with the television screen as the main source of light, creating a contrast between light and dark areas.",
+    "qualityIssues": [],
+    "safetyTags": [],
+    "confidence": 0.95
+  },
+  {
+    "provider": "gemini",
+    "path": "images/80758d99_Screenshot 2025-09-07 at 12.41.58 PM.png",
+    "hash": "6c78e487b9a7ac759eaf288ccab14d66e79818e4e98e10cbf0a3d960b3cc949a",
+    "width": 1536,
+    "height": 1021,
+    "format": "jpeg",
+    "palette": [
+      "#334155",
+      "#547091",
+      "#87a1bc",
+      "dark blue",
+      "light blue"
+    ],
+    "subjects": [
+      "woman",
+      "water",
+      "lake",
+      "sky",
+      "sun",
+      "silhouette",
+      "reflection"
+    ],
+    "objects": [
+      "woman",
+      "water",
+      "lake",
+      "sky",
+      "sun",
+      "silhouette",
+      "reflection"
+    ],
+    "scene": "A silhouetted woman wading in a calm lake at sunset, with a bright sun in the background.",
+    "style": [
+      "dreamlike",
+      "surreal",
+      "photographic",
+      "vintage",
+      "dark",
+      "muted",
+      "minimalist",
+      "atmospheric"
+    ],
+    "composition": "The image is centered on the woman's silhouette, creating a sense of mystery and isolation. The bright sun in the background provides a stark contrast.",
+    "colors": [
+      "#334155",
+      "#547091",
+      "#87a1bc",
+      "dark blue",
+      "light blue"
+    ],
+    "lighting": "Backlit scene with a bright, hazy sun as the main light source. Creates a dreamy, ethereal atmosphere.",
+    "qualityIssues": [
+      "film grain",
+      "dust"
+    ],
+    "safetyTags": [],
+    "confidence": 0.95
+  },
+  {
+    "provider": "gemini",
+    "path": "images/fa228511_Screenshot 2025-09-07 at 12.44.20 PM.png",
+    "hash": "41982ef1138239840e8e78328fde77c744cd3eaebb6cec0736f6b1651371fab7",
+    "width": 1536,
+    "height": 1014,
+    "format": "jpeg",
+    "palette": [
+      "#0077CC",
+      "#FFFFFF",
+      "#D3D3D3",
+      "#8B8989"
+    ],
+    "subjects": [
+      "sky",
+      "clouds",
+      "salt flat",
+      "two people",
+      "reflection",
+      "mountains"
+    ],
+    "objects": [
+      "sky",
+      "clouds",
+      "salt flat",
+      "two people",
+      "reflection",
+      "mountains"
+    ],
+    "scene": "Two figures walk on a vast salt flat reflecting a dramatic sky and clouds.",
+    "style": [
+      "minimalist",
+      "landscape",
+      "photographic",
+      "realistic",
+      "reflective"
+    ],
+    "composition": "Symmetrical composition with figures in the center, leading lines towards the horizon.",
+    "colors": [
+      "#0077CC",
+      "#FFFFFF",
+      "#D3D3D3",
+      "#8B8989"
+    ],
+    "lighting": "Natural daylight, bright sky, subtle shadows on the salt flat.",
+    "qualityIssues": [],
+    "safetyTags": [],
+    "confidence": 0.95
+  }
+]

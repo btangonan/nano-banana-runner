@@ -1,0 +1,369 @@
+[
+  {
+    "path": "/mnt/data/Screenshot 2025-09-07 at 12.41.37\u202fPM.png",
+    "hash": "59d9d19ab977da2c03d30e6bbb06242012e2b80abf9daa8064ccd2ea0c9264c7",
+    "title": "Edge of the Fjord",
+    "purpose": "Cinematic establishing plate / editorial hero still for titles or VO.",
+    "subject": "Lone human silhouette standing at the lip of a sheer cliff over a deep fjord.",
+    "actions": [
+      "standing still",
+      "looking into the void"
+    ],
+    "mood": [
+      "sublime",
+      "lonely",
+      "awe",
+      "existential"
+    ],
+    "shot": {
+      "type": "extreme wide establishing",
+      "angle": "slightly low from opposing cliff face",
+      "lens": "24mm wide equivalent",
+      "framing": "subject ~1\u20132% of frame; head\u2011to\u2011toe; full body visible, no cropping",
+      "aspectRatio": "3:2"
+    },
+    "environment": {
+      "biome": "rocky fjord / snow\u2011streaked cliffs",
+      "elevation": "high cliff edge",
+      "atmosphere": [
+        "cold haze",
+        "blue hour tint"
+      ],
+      "water": "still, dark, mirrorlike far below"
+    },
+    "lighting": {
+      "timeOfDay": "blue hour / civil twilight",
+      "quality": "soft ambient, low key",
+      "direction": "broad skylight from above",
+      "color": "cool cobalt/teal cast",
+      "notes": "no direct sun; gentle falloff into black shadows"
+    },
+    "style": [
+      "photoreal",
+      "analog film grain",
+      "subtle halation",
+      "desaturated cool palette",
+      "cinematic minimalism"
+    ],
+    "filmStockLike": "tungsten\u2011balanced color negative pushed +1 stop; coarse grain",
+    "colors": {
+      "dominant": [
+        "#0B2D5A",
+        "#0E1B27",
+        "#1C3B52"
+      ],
+      "accents": [
+        "#6087A3",
+        "#9DB6C9"
+      ],
+      "notes": "monochrome\u2011leaning cobalt/teal; crushed blacks"
+    },
+    "composition": {
+      "principles": [
+        "rule of thirds (subject on right ridge line)",
+        "negative space",
+        "scale contrast"
+      ],
+      "horizon": "upper third hidden by cliff mass",
+      "lines": [
+        "knife\u2011edge cliff leading to subject"
+      ]
+    },
+    "textures": [
+      "wind\u2011etched rock",
+      "snow patches",
+      "coarse film grain"
+    ],
+    "objects": [
+      "person",
+      "cliff",
+      "fjords",
+      "snow patches",
+      "distant mountains"
+    ],
+    "videoHints": {
+      "camera": "slow drift forward (0.2 m/s), micro handheld sway; no parallax spikes",
+      "motion": [
+        "subtle wind on jacket",
+        "faint moving haze"
+      ],
+      "looping": "allow 6\u20138 s seamless loop"
+    },
+    "negativeConstraints": [
+      "no extra moons or aurora",
+      "no additional people",
+      "no visible safety railings",
+      "keep subject silhouette; avoid face detail",
+      "no birds"
+    ],
+    "safetyTags": []
+  },
+  {
+    "path": "/mnt/data/Screenshot 2025-09-07 at 12.41.58\u202fPM.png",
+    "hash": "ba42112202faa6d03c749474df9657add2c6ad46976b2267cb6f90c4294f3e6b",
+    "title": "Backlit Swimmer at Dusk",
+    "purpose": "Dreamy interstitial / music\u2011driven montage plate; could open a memory sequence.",
+    "subject": "Human silhouette chest\u2011deep in a calm lake, facing the bright low sun.",
+    "actions": [
+      "treading water",
+      "gently turning shoulders"
+    ],
+    "mood": [
+      "dreamlike",
+      "intimate",
+      "nostalgic",
+      "quiet"
+    ],
+    "shot": {
+      "type": "medium\u2011wide",
+      "angle": "eye\u2011level from the waterline",
+      "lens": "50mm normal equivalent",
+      "framing": "upper torso centered; horizon low middle; sun high center",
+      "aspectRatio": "3:2"
+    },
+    "environment": {
+      "biome": "still freshwater lake",
+      "surroundings": "distant low hills",
+      "waterSurface": "glass with soft ripples; specular highlights"
+    },
+    "lighting": {
+      "timeOfDay": "late dusk / early dawn (backlit)",
+      "quality": "hazy, veiled glare; strong bloom on highlights",
+      "direction": "front backlight toward camera",
+      "color": "cool blue\u2011cyan cast; slight warm core at sun"
+    },
+    "style": [
+      "photoreal",
+      "vintage film",
+      "soft bloom",
+      "low contrast",
+      "pastel blues"
+    ],
+    "filmStockLike": "daylight color negative with halation; slight underexposure",
+    "colors": {
+      "dominant": [
+        "#1E3A5F",
+        "#395B7C",
+        "#8FB3C9"
+      ],
+      "accents": [
+        "#D8E7F2",
+        "#F5F2E9"
+      ],
+      "notes": "cool aquatic palette with pearly highlights"
+    },
+    "composition": {
+      "principles": [
+        "central figure",
+        "strong backlight",
+        "reflections aligned with sun"
+      ],
+      "lines": [
+        "sparkle trail leading from camera to sun"
+      ]
+    },
+    "textures": [
+      "lake ripples",
+      "bloomed highlights",
+      "fine film dust"
+    ],
+    "objects": [
+      "person",
+      "lake",
+      "sun",
+      "distant shoreline",
+      "reflections"
+    ],
+    "videoHints": {
+      "camera": "locked to gentle bobbing at waterline; no fast pans",
+      "motion": [
+        "water ripples propagate outward",
+        "sparkles twinkle"
+      ],
+      "looping": "8\u201310 s loop via ripple reset"
+    },
+    "negativeConstraints": [
+      "no extra suns or lens flares crossing subject",
+      "avoid visible facial detail",
+      "keep water calm (no waves)",
+      "no boats or buildings"
+    ],
+    "safetyTags": []
+  },
+  {
+    "path": "/mnt/data/Screenshot 2025-09-07 at 12.44.20\u202fPM.png",
+    "hash": "c459062c361ad331cc4d2fcf6d9d691e7bd5f2b2132420dd227cfe57f1624c02",
+    "title": "Salt Flat Walkers",
+    "purpose": "Hero landscape plate / brand anthemic wide suitable for copy or logo lockup.",
+    "subject": "Two small human figures walking across a mirror\u2011wet salt flat under towering cumulus clouds.",
+    "actions": [
+      "walking forward together"
+    ],
+    "mood": [
+      "expansive",
+      "hopeful",
+      "tranquil",
+      "adventurous"
+    ],
+    "shot": {
+      "type": "very wide landscape",
+      "angle": "eye\u2011level horizon",
+      "lens": "28mm wide equivalent",
+      "framing": "figures centered small; horizon mid\u2011frame; massive sky dominates",
+      "aspectRatio": "3:2"
+    },
+    "environment": {
+      "locationType": "salt flat (after rain)",
+      "surface": "thin reflective water sheet creating near\u2011perfect mirror",
+      "distant": "low mountain ranges on horizon"
+    },
+    "lighting": {
+      "timeOfDay": "daylight after storm",
+      "quality": "crisp, high\u2011key with soft shadows",
+      "direction": "broad skylight with sun behind clouds",
+      "color": "neutral with warm accents in clouds"
+    },
+    "style": [
+      "photoreal",
+      "epic landscape",
+      "clear atmosphere",
+      "high dynamic range"
+    ],
+    "filmStockLike": "fine\u2011grain daylight negative; normal contrast",
+    "colors": {
+      "dominant": [
+        "#1666B3",
+        "#F4F6F8",
+        "#B7C3CF"
+      ],
+      "accents": [
+        "#8C7359",
+        "#5B6B7A"
+      ],
+      "notes": "cerulean sky, white anvils, muted earth tones"
+    },
+    "composition": {
+      "principles": [
+        "symmetry via reflection",
+        "center emphasis",
+        "scale contrast"
+      ],
+      "lines": [
+        "cloud stacks lead toward center",
+        "reflected horizon reinforces symmetry"
+      ]
+    },
+    "textures": [
+      "glassy water film",
+      "puffy cumulus",
+      "crisp reflections"
+    ],
+    "objects": [
+      "two people",
+      "salt flat",
+      "cloud banks",
+      "mountains",
+      "reflections"
+    ],
+    "videoHints": {
+      "camera": "slow push\u2011in; tripod\u2011steady horizon",
+      "motion": [
+        "figures walk in sync; reflections ripple minimally",
+        "clouds evolve slowly"
+      ],
+      "looping": "10\u201312 s with gentle cloud morphing"
+    },
+    "negativeConstraints": [
+      "no vehicles or structures",
+      "no deep waves",
+      "keep figures human scale (no giants)"
+    ],
+    "safetyTags": []
+  },
+  {
+    "path": "/mnt/data/Screenshot 2025-09-07 at 12.43.25\u202fPM.png",
+    "hash": "e590b3ae3880b31afd30cd7c5789912f8cb20a7f362f5d3fb9b8a821fa9f040a",
+    "title": "CRT in the Canal",
+    "purpose": "Conceptual editorial visual / commentary on media and environment.",
+    "subject": "Old CRT television partially submerged in dark canal water showing a paused soccer match.",
+    "actions": [
+      "screen content static; water flows slowly past"
+    ],
+    "mood": [
+      "surreal",
+      "melancholic",
+      "absurd"
+    ],
+    "shot": {
+      "type": "medium close\u2011up of object",
+      "angle": "slight high angle from riverbank",
+      "lens": "35\u201350mm normal",
+      "framing": "TV offset left; negative space of moving water on right",
+      "aspectRatio": "16:9"
+    },
+    "environment": {
+      "water": "urban canal / river; ripples and leaf debris",
+      "banks": "not visible; implied nearby greenery/algae on bezel"
+    },
+    "lighting": {
+      "timeOfDay": "overcast daylight",
+      "quality": "soft, diffuse; no hard shadows",
+      "direction": "ambient from cloudy sky",
+      "color": "cool green\u2011blue water; neutral screen whites"
+    },
+    "style": [
+      "photoreal",
+      "conceptual still life",
+      "documentary realism with surreal juxtaposition"
+    ],
+    "filmStockLike": "neutral daylight negative; mild grain",
+    "colors": {
+      "dominant": [
+        "#1F3A41",
+        "#2A4B4F",
+        "#6C8A90"
+      ],
+      "accents": [
+        "#C5D1D8",
+        "#B44A3C",
+        "#F0E7D8"
+      ],
+      "notes": "deep teal water, muted bezel, jersey stripes on screen"
+    },
+    "composition": {
+      "principles": [
+        "rule of thirds (TV left third)",
+        "contrast of order vs chaos"
+      ],
+      "lines": [
+        "ripples diagonally sweep toward screen"
+      ]
+    },
+    "textures": [
+      "algae scum on bezel",
+      "watery ripples",
+      "glass reflections"
+    ],
+    "objects": [
+      "CRT television",
+      "water surface",
+      "footballers on screen",
+      "reflections"
+    ],
+    "videoHints": {
+      "camera": "locked off; micro\u2011jitters only",
+      "motion": [
+        "water ripples distort screen edge",
+        "occasional bubble/leaf drift"
+      ],
+      "looping": "6\u20138 s tileable water motion"
+    },
+    "negativeConstraints": [
+      "must be CRT (no flat panel)",
+      "no floating above water",
+      "no cables or power cords visible",
+      "screen content remains soccer; no commercials"
+    ],
+    "safetyTags": []
+  }
+]
