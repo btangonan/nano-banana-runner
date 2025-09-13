@@ -107,7 +107,7 @@ export const RemixResponse = z.object({
   sourceImages: z.number().min(0),
   avgPerImage: z.number().min(0),
   duration: z.string(),
-  sample: z.array(PromptRow).max(5).optional(),
+  sample: z.array(PromptRow).optional(),
   outputPath: z.string(),
   promptsBySource: z.record(z.string(), z.number()),
 }).strict();

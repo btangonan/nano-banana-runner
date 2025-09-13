@@ -1,6 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { runAnalyze } from "../../../src/workflows/runAnalyze.js";
+import { runAnalyzeCinematic } from "../../../src/workflows/runAnalyzeCinematic.js";
 import { loadEnv } from "../../../src/config/env.js";
 import { resetProvider } from "../../../src/core/analyze.js";
 import { readFile } from "node:fs/promises";
@@ -16,6 +17,10 @@ export default async function analyzeRoutes(fastify: FastifyInstance) {
     inDir: z.string().default('./images'),
     // Coerce to number in case it comes as string from forms
     concurrency: z.coerce.number().int().min(1).max(10).default(4),
+    // Enable cinematic mode for rich, production-grade descriptions
+    cinematic: z.boolean().default(true),
+    // Enable ultra-cinematic mode for maximum quality
+    ultra: z.boolean().default(true),
   }).strict();
 
   fastify.post('/ui/analyze', async (request, reply) => {
@@ -34,7 +39,7 @@ export default async function analyzeRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const { inDir, concurrency } = validation.data;
+      const { inDir, concurrency, cinematic, ultra } = validation.data;
       const outputPath = './artifacts/descriptors.json';
 
       // Security: validate directory path (prevent traversal)
@@ -52,6 +57,8 @@ export default async function analyzeRoutes(fastify: FastifyInstance) {
         inDir,
         outputPath,
         concurrency,
+        cinematic,
+        ultra,
       }, 'Starting image analysis via API');
 
       // Load environment configuration for CLI context
@@ -61,18 +68,30 @@ export default async function analyzeRoutes(fastify: FastifyInstance) {
       fastify.log.info({
         NN_ANALYZE_PROVIDER: process.env.NN_ANALYZE_PROVIDER,
         GEMINI_API_KEY_SET: !!process.env.GEMINI_API_KEY,
-        CWD: process.cwd()
+        CWD: process.cwd(),
+        CINEMATIC_MODE: cinematic,
+        ULTRA_MODE: ultra
       }, 'Environment loaded for analysis');
       
       // Reset provider cache to pick up new environment config
       resetProvider();
 
-      // Call existing runAnalyze workflow
-      await runAnalyze({
-        inDir,
-        outPath: outputPath,
-        concurrency,
-      });
+      // Use cinematic workflow for rich descriptions, or standard for basic
+      if (cinematic) {
+        await runAnalyzeCinematic({
+          inDir,
+          outPath: outputPath,
+          concurrency,
+          ultra,
+        });
+      } else {
+        // Fall back to standard analysis for backward compatibility
+        await runAnalyze({
+          inDir,
+          outPath: outputPath,
+          concurrency,
+        });
+      }
 
       // Read the generated descriptors to get counts and sample data
       const descriptorsContent = await readFile(outputPath, 'utf-8');
@@ -92,11 +111,24 @@ export default async function analyzeRoutes(fastify: FastifyInstance) {
         width: descriptor.width,
         height: descriptor.height,
         format: descriptor.format,
-        palette: descriptor.palette || [],
-        subjects: descriptor.subjects || [],
+        // Handle both ultra-cinematic (nested) and standard (flat) structures
+        palette: descriptor.color?.palette 
+          ? [
+              ...(descriptor.color.palette.primary || []),
+              ...(descriptor.color.palette.secondary || []),
+              ...(descriptor.color.palette.accent || [])
+            ].filter(Boolean)
+          : descriptor.palette || [],
+        // Handle singular subject (ultra-cinematic) vs plural subjects (standard)
+        subjects: descriptor.subject 
+          ? [descriptor.subject]
+          : descriptor.subjects || [],
         // Frontend also expects these fields:
         style: descriptor.style || [],  // Array of style descriptors
-        lighting: descriptor.lighting || 'unknown',  // String description of lighting
+        // Handle lighting field - can be string (standard) or object (ultra-cinematic)
+        lighting: typeof descriptor.lighting === 'object' && descriptor.lighting !== null
+          ? `${(descriptor.lighting as any).quality || 'Unknown quality'}, ${(descriptor.lighting as any).contrast || 'unknown contrast'}`
+          : descriptor.lighting || 'unknown',  // String description of lighting
         // Exclude Gemini-specific fields: objects, scene, composition, colors, qualityIssues, safetyTags, confidence
       }));
 

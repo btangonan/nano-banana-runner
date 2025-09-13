@@ -74,8 +74,8 @@ export default async function remixRoutes(fastify: FastifyInstance) {
         return acc;
       }, {} as Record<string, number>);
 
-      // Get a sample of the first 5 prompts for preview
-      const sample = prompts.slice(0, 5);
+      // Return all prompts for display and editing
+      const sample = prompts;
 
       const duration = `${((Date.now() - startTime) / 1000).toFixed(1)}s`;
 

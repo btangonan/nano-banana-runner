@@ -186,15 +186,35 @@ function generatePromptsForDescriptor(
 ): PromptRow[] {
   const prompts: PromptRow[] = [];
   
+  // Handle both ultra-cinematic (singular subject) and standard (plural subjects) formats
+  const subjects = descriptor.subjects || (descriptor.subject ? [descriptor.subject] : []);
+  
+  // Handle lighting as either array (standard) or object (ultra-cinematic)
+  let lightingArray: string[] = [];
+  if (Array.isArray(descriptor.lighting)) {
+    lightingArray = descriptor.lighting;
+  } else if (typeof descriptor.lighting === 'object' && descriptor.lighting !== null) {
+    // Extract lighting terms from ultra-cinematic object
+    const lightingObj = descriptor.lighting as any;
+    if (lightingObj.quality) lightingArray.push(lightingObj.quality);
+    if (lightingObj.timeOfDay) lightingArray.push(lightingObj.timeOfDay);
+    if (lightingObj.direction) lightingArray.push(lightingObj.direction);
+  } else if (typeof descriptor.lighting === 'string') {
+    lightingArray = [descriptor.lighting];
+  }
+  
+  // Ensure style is an array
+  const styleArray = Array.isArray(descriptor.style) ? descriptor.style : [];
+  
   for (let i = 0; i < options.maxPerImage; i++) {
     // Generate variations
-    const styleAdj = varyStyleAdjectives(descriptor.style, rng, options.maxStyleAdj);
-    const lighting = varyLighting(descriptor.lighting, rng, options.maxLighting);
+    const styleAdj = varyStyleAdjectives(styleArray, rng, options.maxStyleAdj);
+    const lighting = varyLighting(lightingArray, rng, options.maxLighting);
     const composition = rng.choice(COMPOSITION_DIRECTIVES);
     
     // Compose prompt
     const basePrompt = composePrompt(
-      descriptor.subjects,
+      subjects,
       styleAdj,
       lighting,
       descriptor.camera,
@@ -206,7 +226,7 @@ function generatePromptsForDescriptor(
     
     // Create tags with provenance
     const tags = [
-      ...descriptor.subjects.map(s => `subject:${s}`),
+      ...subjects.map(s => `subject:${s}`),
       ...styleAdj.map(s => `style:${s}`),
       ...lighting.map(l => `lighting:${l.replace(' ', '-')}`),
       `composition:${composition.replace(' ', '-')}`,

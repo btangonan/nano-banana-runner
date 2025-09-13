@@ -88,7 +88,7 @@ const CinematicDescriptorSchema = z.object({
 }).strict();
 
 /**
- * Ultra-cinematic descriptor schema with full production fields
+ * Ultra-cinematic descriptor schema - streamlined for observable elements
  */
 const UltraCinematicDescriptorSchema = z.object({
   path: z.string(),
@@ -98,9 +98,11 @@ const UltraCinematicDescriptorSchema = z.object({
   height: z.number(),
   format: z.string(),
   
-  title: z.string(),
-  narrative: z.string().optional(),
-  purpose: z.string(),
+  narrative: z.object({
+    story: z.string(),
+    emotion: z.string()
+  }),
+  
   subject: z.string(),
   actions: z.array(z.string()),
   mood: z.array(z.string()),
@@ -110,7 +112,6 @@ const UltraCinematicDescriptorSchema = z.object({
     angle: z.string(),
     lens: z.string(),
     framing: z.string(),
-    aspectRatio: z.string(),
     focalPoint: z.string().optional(),
     depthOfField: z.string().optional()
   }),
@@ -191,39 +192,13 @@ const UltraCinematicDescriptorSchema = z.object({
   objects: z.array(z.string()).optional(),
   scene: z.string().optional(),
   
-  production: z.object({
-    vfx: z.string().optional(),
-    stunts: z.string().optional(),
-    sfx: z.string().optional(),
-    props: z.string().optional()
-  }).optional(),
-  
   videoHints: z.object({
     duration: z.string().optional(),
     motion: z.array(z.string()),
-    looping: z.string().optional(),
-    transitions: z.union([z.string(), z.array(z.string())]).optional(),
-    fps: z.string().optional(),
-    camera: z.string().optional()
+    fps: z.string().optional()
   }),
   
-  narrative: z.object({
-    story: z.string(),
-    emotion: z.string(),
-    subtext: z.string(),
-    symbolism: z.string(),
-    foreshadowing: z.string()
-  }).optional(),
-  
-  postProduction: z.object({
-    edit: z.string(),
-    sound: z.string(),
-    music: z.string(),
-    colorSpace: z.string()
-  }).optional(),
-  
   references: z.array(z.string()).optional(),
-  director_notes: z.string().optional(),
   
   negativeConstraints: z.array(z.string()),
   qualityNotes: z.array(z.string()).optional(),
