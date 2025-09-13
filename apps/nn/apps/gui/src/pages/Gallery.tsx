@@ -17,6 +17,7 @@ import { FetchRequest, FetchResponse } from '@/lib/contracts'
 import type { ToastProps } from '@/components/ui/Toast'
 
 interface GalleryProps {
+  jobId?: string | null
   onNext?: () => void
   onBack: () => void
   toast: (props: Omit<ToastProps, 'id'>) => void
@@ -33,8 +34,8 @@ interface GalleryItem {
   downloadUrl: string
 }
 
-export function Gallery({ onNext, onBack, toast }: GalleryProps) {
-  // Get jobId from URL params or state
+export function Gallery({ jobId: propJobId, onNext, onBack, toast }: GalleryProps) {
+  // Get jobId from props or URL params
   const [jobId, setJobId] = useState<string>('')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [selectedImage, setSelectedImage] = useState<GalleryItem | null>(null)
@@ -43,14 +44,18 @@ export function Gallery({ onNext, onBack, toast }: GalleryProps) {
   const [page, setPage] = useState(0)
   const itemsPerPage = 20
 
-  // Initialize jobId from URL params
+  // Initialize jobId from props or URL params
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search)
-    const urlJobId = urlParams.get('jobId')
-    if (urlJobId) {
-      setJobId(urlJobId)
+    if (propJobId) {
+      setJobId(propJobId)
+    } else {
+      const urlParams = new URLSearchParams(window.location.search)
+      const urlJobId = urlParams.get('jobId')
+      if (urlJobId) {
+        setJobId(urlJobId)
+      }
     }
-  }, [])
+  }, [propJobId])
 
   // Fetch gallery data
   const { data, isLoading, error, refetch } = useQuery({
@@ -65,21 +70,43 @@ export function Gallery({ onNext, onBack, toast }: GalleryProps) {
         offset: (page * itemsPerPage).toString(),
       })
       
-      return apiClient.get(`/ui/fetch?${params.toString()}`, FetchResponse)
+      console.log('[Gallery] Fetching with params:', params.toString())
+      const response = await apiClient.get(`/ui/fetch?${params.toString()}`, FetchResponse)
+      console.log('[Gallery] API response:', response)
+      return response
     },
     enabled: !!jobId,
     refetchInterval: false,
     retry: 1,
+    staleTime: 0,  // Don't cache results
+    gcTime: 0,      // Remove from cache immediately
   })
 
   // Filter items based on search and type filter
-  const filteredItems = data?.results && 'items' in data.results 
-    ? data.results.items.filter(item => {
-        const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase())
-        const matchesType = typeFilter === 'all' || item.type === typeFilter
-        return matchesSearch && matchesType
-      })
+  const rawItems = data?.results && 'items' in data.results 
+    ? data.results.items 
     : []
+  
+  const filteredItems = rawItems.filter(item => {
+    const matchesSearch = !searchTerm || item.name.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesType = typeFilter === 'all' || item.type === typeFilter
+    return matchesSearch && matchesType
+  })
+  
+  // Debug logging
+  console.log('[Gallery] JobId:', jobId)
+  console.log('[Gallery] Data:', data)
+  console.log('[Gallery] Raw items:', rawItems)
+  console.log('[Gallery] Search term:', searchTerm, 'Type filter:', typeFilter)
+  console.log('[Gallery] Filtered items:', filteredItems)
+  
+  // Force refetch when component mounts with a jobId
+  useEffect(() => {
+    if (jobId && refetch) {
+      console.log('[Gallery] Force refetching for jobId:', jobId)
+      refetch()
+    }
+  }, [jobId])
 
   // Get unique types for filter dropdown
   const availableTypes = data?.results && 'items' in data.results
@@ -113,7 +140,7 @@ export function Gallery({ onNext, onBack, toast }: GalleryProps) {
       })
     } catch (error) {
       toast({
-        variant: 'error',
+        variant: 'destructive',
         title: 'Download Failed',
         description: 'Could not download the image',
       })
@@ -144,7 +171,7 @@ export function Gallery({ onNext, onBack, toast }: GalleryProps) {
       })
     } catch (error) {
       toast({
-        variant: 'error',
+        variant: 'destructive',
         title: 'Bulk Download Failed',
         description: 'Could not download the results archive',
       })
@@ -170,9 +197,14 @@ export function Gallery({ onNext, onBack, toast }: GalleryProps) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold">Gallery</h1>
-            <p className="text-muted-foreground">Generated images</p>
+          <div className="flex items-center gap-4">
+            <Button variant="outline" size="sm" onClick={onBack}>
+              ← Back
+            </Button>
+            <div>
+              <h1 className="text-2xl font-semibold">Gallery</h1>
+              <p className="text-muted-foreground">Generated images</p>
+            </div>
           </div>
         </div>
 
@@ -183,15 +215,10 @@ export function Gallery({ onNext, onBack, toast }: GalleryProps) {
             <p className="text-muted-foreground mb-4">
               {error instanceof ApiError ? error.detail : 'Could not load the image gallery'}
             </p>
-            <div className="flex gap-2 justify-center">
-              <Button variant="outline" onClick={onBack}>
-                Back
-              </Button>
-              <Button onClick={() => refetch()} className="flex items-center gap-2">
-                <RefreshCw className="w-4 h-4" />
-                Retry
-              </Button>
-            </div>
+            <Button onClick={() => refetch()} className="flex items-center gap-2">
+              <RefreshCw className="w-4 h-4" />
+              Retry
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -203,9 +230,14 @@ export function Gallery({ onNext, onBack, toast }: GalleryProps) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold">Gallery</h1>
-            <p className="text-muted-foreground">Loading generated images...</p>
+          <div className="flex items-center gap-4">
+            <Button variant="outline" size="sm" onClick={onBack}>
+              ← Back
+            </Button>
+            <div>
+              <h1 className="text-2xl font-semibold">Gallery</h1>
+              <p className="text-muted-foreground">Loading generated images...</p>
+            </div>
           </div>
         </div>
 
@@ -225,16 +257,21 @@ export function Gallery({ onNext, onBack, toast }: GalleryProps) {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Gallery</h1>
-          <p className="text-muted-foreground">
-            {data ? `${data.results.total} generated images` : 'Generated images'}
-            {jobId && (
-              <code className="ml-2 text-xs bg-muted px-2 py-1 rounded">
-                {jobId.slice(0, 8)}...
-              </code>
-            )}
-          </p>
+        <div className="flex items-center gap-4">
+          <Button variant="outline" size="sm" onClick={onBack}>
+            ← Back
+          </Button>
+          <div>
+            <h1 className="text-2xl font-semibold">Gallery</h1>
+            <p className="text-muted-foreground">
+              {data ? `${data.results.total} generated images` : 'Generated images'}
+              {jobId && (
+                <code className="ml-2 text-xs bg-muted px-2 py-1 rounded">
+                  {jobId.slice(0, 8)}...
+                </code>
+              )}
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -516,17 +553,13 @@ export function Gallery({ onNext, onBack, toast }: GalleryProps) {
       </Dialog>
 
       {/* Actions */}
-      <div className="flex justify-between">
-        <Button variant="outline" onClick={onBack}>
-          Back
-        </Button>
-        
-        {onNext && (
+      {onNext && (
+        <div className="flex justify-end">
           <Button onClick={onNext}>
-            Next
+            Next →
           </Button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { createWriteStream } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readdir, unlink } from "node:fs/promises";
 import { join, basename, extname } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { createHash, randomUUID } from "node:crypto";
@@ -71,6 +71,40 @@ export default async function uploadRoutes(fastify: FastifyInstance) {
       const files: Array<{ filename: string; path: string; size: number }> = [];
       const warnings: string[] = [];
       let fileCount = 0;
+      let clearExisting = false;
+
+      // Check for clearExisting in query params or body
+      // Can be passed as query param: /ui/upload?clearExisting=true
+      const queryParams = request.query as any;
+      if (queryParams && (queryParams.clearExisting === 'true' || queryParams.clearExisting === true)) {
+        clearExisting = true;
+        fastify.log.info({ clearExisting }, 'Clear existing flag detected from query params');
+      }
+
+      // Clear existing images if requested (before processing new uploads)
+      if (clearExisting) {
+        try {
+          const existingFiles = await readdir(UPLOAD_DIR);
+          let clearedCount = 0;
+          
+          for (const file of existingFiles) {
+            if (ALLOWED_EXTENSIONS.some(ext => file.endsWith(ext))) {
+              await unlink(join(UPLOAD_DIR, file));
+              clearedCount++;
+            }
+          }
+          
+          if (clearedCount > 0) {
+            fastify.log.info({ clearedCount }, 'Cleared existing image files');
+            // Note: File clearing is intentional and successful - not a warning
+          }
+        } catch (clearError) {
+          fastify.log.warn({ 
+            error: clearError instanceof Error ? clearError.message : String(clearError) 
+          }, 'Failed to clear existing files');
+          warnings.push('Could not clear existing files');
+        }
+      }
 
       // Process multipart files
       const parts = request.files();

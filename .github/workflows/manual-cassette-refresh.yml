@@ -1,0 +1,86 @@
+name: Manual Cassette Refresh
+
+# Only run when manually triggered - NO automatic runs
+on:
+  workflow_dispatch:  # Manual trigger only
+    inputs:
+      budget:
+        description: 'Budget limit in USD'
+        required: false
+        default: '1.00'
+        type: string
+
+jobs:
+  refresh-cassettes:
+    name: Record Fresh Cassettes
+    runs-on: ubuntu-latest
+    
+    # Only run on main repository, not forks
+    if: github.repository_owner == 'bradleytangonan'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+      
+      - name: Install dependencies
+        run: |
+          cd apps/nn
+          pnpm install --frozen-lockfile
+      
+      - name: Build project
+        run: |
+          cd apps/nn
+          pnpm build
+      
+      # Record new cassettes with real API calls
+      - name: Record E2E cassettes
+        env:
+          E2E_MODE: record
+          E2E_BUDGET_USD: ${{ github.event.inputs.budget }}  # User-specified budget
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          cd apps/nn
+          echo "Recording cassettes with budget limit: $E2E_BUDGET_USD"
+          pnpm test:e2e || echo "Some tests may fail during recording"
+      
+      # Commit updated cassettes
+      - name: Commit cassettes
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          
+          cd apps/nn
+          git add test/e2e/fixtures/recordings/
+          git diff --quiet && git diff --staged --quiet || \
+            git commit -m "chore: update E2E test cassettes [skip ci]"
+      
+      # Push changes
+      - name: Push cassettes
+        if: success()
+        run: git push origin HEAD:main
+      
+      # Create issue if recording failed
+      - name: Create issue on failure
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'E2E Cassette Recording Failed',
+              body: 'The nightly cassette recording job failed. Please check the logs and update cassettes manually.',
+              labels: ['bug', 'e2e-tests']
+            })

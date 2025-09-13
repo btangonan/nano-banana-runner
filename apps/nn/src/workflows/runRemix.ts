@@ -1,5 +1,5 @@
 import { createOperationLogger, logTiming } from '../logger.js';
-import { generatePrompts } from '../core/remix.js';
+import { generatePrompts } from '../core/remix/index.js';
 import { FileSystemManifest } from '../adapters/fs-manifest.js';
 import type { ImageDescriptor } from '../types.js';
 
@@ -36,7 +36,7 @@ export async function runRemix(opts: RemixOptions): Promise<void> {
     log.info({ count: descriptors.length }, 'Loaded image descriptors');
     
     // Generate prompts with deterministic seeding
-    const prompts = generatePrompts(descriptors, {
+    const prompts = await generatePrompts(descriptors, {
       maxPerImage: opts.maxPerImage,
       seed: opts.seed,
       maxStyleAdj: 3,  // Default from remix module

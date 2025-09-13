@@ -5,7 +5,7 @@ Get maximum depth, quality, and efficiency from Claude Code when developing and 
 
 ## Project Context
 - **What**: Terminal image analyzer → prompt remixer → Gemini image generator with style-only conditioning
-- **Stack**: TypeScript, Node 20, Vertex AI (Google Gen AI SDK), Fastify, React, Zod
+- **Stack**: TypeScript, Node 20, Gemini Batch API, Fastify, React, Zod
 - **Principles**: Small slices (≤300 LOC), typed everything, zero secrets in code, fail fast + recover
 
 ## Development Modes
@@ -163,7 +163,7 @@ Copy-paste these commands for focused reviews:
 
 ### Test Data
 - Fixtures in tests/fixtures/
-- Mock responses for Vertex API
+- Mock responses for Gemini API
 - Deterministic seeds for reproducibility
 
 ## Review Checklist
@@ -248,10 +248,10 @@ const styleOnlyPrefix = {
 
 ## Architecture Decisions
 
-### ADR-001: Google Gen AI SDK over Vertex SDK
-- **Decision**: Use @google/generative-ai
-- **Reason**: Vertex SDK deprecated, Gen AI is future path
-- **Trade-off**: Slightly different API, but avoiding migration
+### ADR-001: Batch API over Direct SDK
+- **Decision**: Use Gemini Batch API via proxy service
+- **Reason**: Better scalability, cost control, and resource management
+- **Trade-off**: Additional proxy complexity but improved batch processing
 
 ### ADR-002: SimHash for Dedupe
 - **Decision**: SimHash + Jaccard over embeddings
@@ -265,7 +265,7 @@ const styleOnlyPrefix = {
 
 ## Troubleshooting
 
-### Issue: Vertex API 429 Rate Limit
+### Issue: API Rate Limits
 - **Cause**: Too many concurrent requests
 - **Fix**: Reduce --concurrency to 2
 - **Prevention**: Implement exponential backoff

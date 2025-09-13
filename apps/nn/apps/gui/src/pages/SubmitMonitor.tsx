@@ -19,7 +19,7 @@ import {
 import type { ToastProps } from '@/components/ui/Toast'
 
 interface SubmitMonitorProps {
-  onNext: () => void
+  onNext: (jobId?: string) => void
   onBack: () => void
   toast: (props: Omit<ToastProps, 'id'>) => void
 }
@@ -59,7 +59,7 @@ export function SubmitMonitor({ onNext, onBack, toast }: SubmitMonitorProps) {
     },
     onError: (error: ApiError) => {
       toast({
-        variant: 'error', 
+        variant: 'destructive', 
         title: 'Preflight Failed',
         description: error.detail || 'Could not estimate costs',
       })
@@ -85,7 +85,7 @@ export function SubmitMonitor({ onNext, onBack, toast }: SubmitMonitorProps) {
     },
     onError: (error: ApiError) => {
       toast({
-        variant: 'error',
+        variant: 'destructive',
         title: 'Submission Failed', 
         description: error.detail || 'Could not submit job',
       })
@@ -133,7 +133,7 @@ export function SubmitMonitor({ onNext, onBack, toast }: SubmitMonitorProps) {
             })
           } else if (response.status === 'failed') {
             toast({
-              variant: 'error',
+              variant: 'destructive',
               title: 'Generation Failed',
               description: 'failed' in response ? response.error.message : 'Job failed unexpectedly',
             })
@@ -165,13 +165,22 @@ export function SubmitMonitor({ onNext, onBack, toast }: SubmitMonitorProps) {
     }
   }, [])
 
+  // Helper functions to map UI provider names to different API enum values
+  const mapProviderToPreflight = (uiProvider: 'batch' | 'vertex'): 'gemini-batch' | 'vertex-ai' => {
+    return uiProvider === 'batch' ? 'gemini-batch' : 'vertex-ai'
+  }
+  
+  const mapProviderToSubmit = (uiProvider: 'batch' | 'vertex'): 'gemini-batch' | 'vertex-ai' => {
+    return uiProvider === 'batch' ? 'gemini-batch' : 'vertex-ai'
+  }
+
   // Handlers
   const handlePreflight = useCallback(() => {
     setJobState({ status: 'preflight' })
     preflightMutation.mutate({
       promptsPath,
       styleDir,
-      provider,
+      provider: mapProviderToPreflight(provider),
       variants,
     })
   }, [promptsPath, styleDir, provider, variants, preflightMutation])
@@ -182,7 +191,7 @@ export function SubmitMonitor({ onNext, onBack, toast }: SubmitMonitorProps) {
     submitMutation.mutate({
       promptsPath,
       styleDir,
-      provider,
+      provider: mapProviderToSubmit(provider),
       variants,
       runMode,
     })
@@ -194,8 +203,10 @@ export function SubmitMonitor({ onNext, onBack, toast }: SubmitMonitorProps) {
       const url = new URL(window.location.href)
       url.searchParams.set('jobId', jobState.jobId)
       window.history.pushState({}, '', url.toString())
+      onNext(jobState.jobId)
+    } else {
+      onNext()
     }
-    onNext()
   }, [jobState.jobId, onNext])
 
   // Render status indicator
@@ -405,19 +416,19 @@ export function SubmitMonitor({ onNext, onBack, toast }: SubmitMonitorProps) {
                         <div className="grid grid-cols-2 gap-4 text-sm">
                           <div>
                             <span className="text-blue-700">Total Images:</span>
-                            <span className="ml-2 font-semibold">{jobState.pollData.result.estimatedImages}</span>
+                            <span className="ml-2 font-semibold">{jobState.pollData.result.dryRunStats?.estimatedImages}</span>
                           </div>
                           <div>
                             <span className="text-blue-700">Estimated Cost:</span>
-                            <span className="ml-2 font-semibold">{jobState.pollData.result.estimatedCost}</span>
+                            <span className="ml-2 font-semibold">{jobState.pollData.result.dryRunStats?.estimatedCost}</span>
                           </div>
                           <div>
                             <span className="text-blue-700">Estimated Time:</span>
-                            <span className="ml-2 font-semibold">{jobState.pollData.result.estimatedTime}</span>
+                            <span className="ml-2 font-semibold">{jobState.pollData.result.dryRunStats?.estimatedTime}</span>
                           </div>
                           <div>
                             <span className="text-blue-700">Provider:</span>
-                            <span className="ml-2 font-semibold">{jobState.pollData.result.provider}</span>
+                            <span className="ml-2 font-semibold">{jobState.pollData.result.dryRunStats?.provider}</span>
                           </div>
                         </div>
                         <div className="mt-3 p-2 bg-blue-100 rounded text-blue-900 text-sm">
@@ -444,12 +455,12 @@ export function SubmitMonitor({ onNext, onBack, toast }: SubmitMonitorProps) {
                           <Eye className="w-4 h-4" />
                           View Gallery
                         </Button>
-                        <Button variant="outline" asChild>
-                          <a href={jobState.pollData.actions.fetchResults} className="flex items-center gap-2">
+                        <a href={jobState.pollData.actions.fetchResults}>
+                          <Button variant="outline" className="flex items-center gap-2">
                             <Download className="w-4 h-4" />
                             Download Results
-                          </a>
-                        </Button>
+                          </Button>
+                        </a>
                       </div>
                     )}
                   </>
@@ -508,7 +519,7 @@ export function SubmitMonitor({ onNext, onBack, toast }: SubmitMonitorProps) {
           )}
 
           {jobState.status === 'completed' && (
-            <Button onClick={onNext} className="flex items-center gap-2">
+            <Button onClick={handleViewGallery} className="flex items-center gap-2">
               <Eye className="w-4 h-4" />
               View Gallery
             </Button>

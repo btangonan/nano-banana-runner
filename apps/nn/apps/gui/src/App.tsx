@@ -4,7 +4,8 @@ import { UploadAnalyze } from './pages/UploadAnalyze'
 import { RemixReview } from './pages/RemixReview'
 import { SubmitMonitor } from './pages/SubmitMonitor'
 import { Gallery } from './pages/Gallery'
-import { ToastContainer, useToast } from './components/ui/Toast'
+import { ToastContainer } from './components/ui/Toast'
+import { useToast } from './hooks/useToast'
 import { cn } from './lib/utils'
 import { CheckCircle, Upload, Shuffle, Send, Eye } from 'lucide-react'
 
@@ -26,6 +27,7 @@ const steps = [
 
 function App() {
   const [currentStep, setCurrentStep] = useState(0)
+  const [jobId, setJobId] = useState<string | null>(null)
   const { toasts, toast, dismiss } = useToast()
 
   const StepIndicator = () => (
@@ -81,12 +83,18 @@ function App() {
         />
       case 2:
         return <SubmitMonitor
-          onNext={() => setCurrentStep(3)}
+          onNext={(completedJobId?: string) => {
+            if (completedJobId) {
+              setJobId(completedJobId)
+            }
+            setCurrentStep(3)
+          }}
           onBack={() => setCurrentStep(1)}
           toast={toast}
         />
       case 3:
         return <Gallery
+          jobId={jobId}
           onBack={() => setCurrentStep(2)}
           toast={toast}
         />

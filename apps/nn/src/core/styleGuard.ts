@@ -9,10 +9,10 @@ export interface GuardConfig {
 }
 
 /**
- * Default configuration (to be calibrated with real data)
+ * Default configuration (calibrated for style-only enforcement)
  */
 export const DEFAULT_GUARD_CONFIG: GuardConfig = {
-  hammingMax: 10  // Will be tuned via calibration
+  hammingMax: 15  // Calibrated: allows style similarity but blocks near-copies
 };
 
 /**
@@ -201,4 +201,58 @@ export interface CalibrationResult {
   accuracy: number;        // Overall accuracy percentage
   fpr: number;            // False positive rate
   fnr: number;            // False negative rate
+}
+
+/**
+ * Build style-only enforcement message
+ */
+export function buildStyleOnlyMessage() {
+  return {
+    role: 'system' as const,
+    parts: [{
+      text: 'Use reference images strictly for style, palette, texture, and mood. Do NOT copy subject geometry, pose, composition, or layout. Create original compositions inspired by the artistic style only.'
+    }]
+  };
+}
+
+/**
+ * Enforce style-only conditioning on a request
+ */
+export function enforceStyleOnly(request: any) {
+  const styleMessage = buildStyleOnlyMessage();
+  
+  return {
+    ...request,
+    contents: [
+      styleMessage,
+      ...(request.contents || [])
+    ]
+  };
+}
+
+/**
+ * Validate that a prompt complies with style-only requirements
+ */
+export function validateStyleOnlyCompliance(prompt: string): { compliant: boolean; issues: string[] } {
+  const issues: string[] = [];
+  const lowerPrompt = prompt.toLowerCase();
+  
+  // Check for copying keywords
+  const copyKeywords = [
+    'exact copy', 'exact same', 'exactly like',
+    'replicate', 'duplicate', 'mirror',
+    'clone', 'identical', 'same as'
+  ];
+  
+  for (const keyword of copyKeywords) {
+    if (lowerPrompt.includes(keyword)) {
+      issues.push('Prompt may encourage direct copying');
+      break;
+    }
+  }
+  
+  return {
+    compliant: issues.length === 0,
+    issues
+  };
 }

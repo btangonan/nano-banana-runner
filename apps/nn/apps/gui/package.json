@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:smoke": "playwright test tests/smoke --reporter=line"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -27,6 +31,7 @@
     "typescript": "^5.5.4",
     "tailwindcss": "^3.4.10",
     "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.47"
+    "postcss": "^8.4.47",
+    "@playwright/test": "^1.47.0"
   }
 }

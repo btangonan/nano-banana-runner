@@ -1,0 +1,148 @@
+name: CI/CD Pipeline
+
+# When to run this workflow
+on:
+  push:
+    branches: [ main, feature/* ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # Job 1: Run Tests
+  test:
+    name: Run E2E Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      # Step 2: Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      # Step 3: Install pnpm
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+      
+      # Step 4: Cache dependencies
+      - name: Cache pnpm store
+        uses: actions/cache@v3
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+      
+      # Step 5: Install dependencies
+      - name: Install dependencies
+        run: |
+          cd apps/nn
+          pnpm install --frozen-lockfile
+      
+      # Step 6: Build the project
+      - name: Build project
+        run: |
+          cd apps/nn
+          pnpm build
+      
+      # Step 7: Run type checking
+      - name: Type check
+        run: |
+          cd apps/nn
+          pnpm typecheck
+      
+      # Step 8: Run linting
+      - name: Lint code
+        run: |
+          cd apps/nn
+          pnpm lint
+      
+      # Step 9: Run unit tests
+      - name: Run unit tests
+        run: |
+          cd apps/nn
+          pnpm test
+      
+      # Step 10: Run E2E tests in replay mode (uses cassettes, no API calls)
+      - name: Run E2E tests
+        env:
+          E2E_MODE: replay
+          E2E_BUDGET_USD: 0.00  # No spending in CI
+        run: |
+          cd apps/nn
+          pnpm test:e2e
+      
+      # Step 11: Upload test results
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results
+          path: |
+            apps/nn/test/e2e/.artifacts/
+            apps/nn/coverage/
+
+  # Job 2: Check proxy service
+  proxy-check:
+    name: Verify Proxy Service
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+      
+      - name: Install proxy dependencies
+        run: |
+          cd apps/nn/proxy
+          pnpm install --frozen-lockfile
+      
+      - name: Build proxy
+        run: |
+          cd apps/nn/proxy
+          pnpm build
+      
+      - name: Test proxy startup
+        run: |
+          cd apps/nn/proxy
+          # Start proxy in background
+          pnpm dev &
+          PROXY_PID=$!
+          
+          # Wait for proxy to start
+          sleep 5
+          
+          # Check health endpoint
+          curl -f http://127.0.0.1:8787/healthz || exit 1
+          
+          # Kill proxy
+          kill $PROXY_PID
+
+  # Job 3: Security scan
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Run security audit
+        run: |
+          cd apps/nn
+          pnpm audit --audit-level=high

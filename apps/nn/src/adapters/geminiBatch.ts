@@ -5,7 +5,7 @@ import { BatchRelayClient } from './batchRelayClient.js';
 import { createOperationLogger } from '../logger.js';
 import { env } from '../config/env.js';
 import { passesStyleGuard } from '../core/styleGuard.js';
-import { STYLE_ONLY_PREFIX } from '../core/remix.js';
+import { STYLE_ONLY_PREFIX } from '../core/remix/index.js';
 
 /**
  * Gemini Batch provider using relay proxy for secure API key handling
@@ -25,6 +25,7 @@ export class GeminiBatchAdapter implements AsyncImageGenProvider {
    * Submit batch job to Gemini via relay
    */
   async submit(req: { 
+    jobId?: string;  // Optional job ID to use
     rows: PromptRow[]; 
     variants: 1 | 2 | 3; 
     styleOnly: true; 
@@ -46,6 +47,7 @@ export class GeminiBatchAdapter implements AsyncImageGenProvider {
     
     try {
       const result = await this.client.submit({
+        jobId: req.jobId,  // Pass optional jobId to relay client
         rows: batchRows,
         variants: req.variants,
         styleOnly: true,

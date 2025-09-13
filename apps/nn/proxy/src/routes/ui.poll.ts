@@ -59,9 +59,10 @@ export default async function pollRoutes(fastify: FastifyInstance) {
         progress: job.progress,
       }, 'Job status polled via API');
 
-      // Calculate timing info
+      // Calculate timing info - handle case where startTime might not be a Date object
       const now = new Date();
-      const elapsed = now.getTime() - job.startTime.getTime();
+      const startTime = job.startTime instanceof Date ? job.startTime : new Date(job.startTime);
+      const elapsed = now.getTime() - startTime.getTime();
       const elapsedSeconds = Math.floor(elapsed / 1000);
       const elapsedMinutes = Math.floor(elapsedSeconds / 60);
       const elapsedTime = elapsedMinutes > 0 
@@ -90,10 +91,10 @@ export default async function pollRoutes(fastify: FastifyInstance) {
         prompts: job.promptCount,
         estimatedImages: job.estimatedImages,
         timing: {
-          startTime: job.startTime.toISOString(),
+          startTime: startTime.toISOString(),
           elapsedTime,
           estimatedRemaining,
-          endTime: job.endTime?.toISOString(),
+          endTime: job.endTime ? (job.endTime instanceof Date ? job.endTime.toISOString() : new Date(job.endTime).toISOString()) : undefined,
         },
         progress: job.progress ? {
           current: job.progress.current,
@@ -108,13 +109,35 @@ export default async function pollRoutes(fastify: FastifyInstance) {
       let response: any = baseResponse;
 
       if (job.status === 'completed') {
+        // Build a schema-safe result for both live & dry-run
+        let result: any = {
+          message: 'Job completed successfully',
+          outputLocation: './outputs',
+        };
+        
+        if (job.result) {
+          result = {
+            message: job.result.message ?? 'Dry-run complete',
+            outputLocation: job.result.outputLocation ?? './outputs',
+          };
+          
+          // Attach dryRunStats if we detect a dry-run object
+          if (typeof job.result.estimatedImages === 'number') {
+            result.dryRunStats = {
+              promptCount: job.result.promptCount ?? 0,
+              variants: job.result.variants ?? 1,
+              estimatedImages: job.result.estimatedImages,
+              estimatedTime: job.result.estimatedTime ?? 'unknown',
+              estimatedCost: job.result.estimatedCost ?? '$0.0000',
+              provider: job.result.provider ?? 'gemini-batch',
+            };
+          }
+        }
+        
         response = {
           ...baseResponse,
           completed: true,
-          result: job.result || {
-            message: 'Job completed successfully',
-            outputLocation: './outputs',
-          },
+          result,
           actions: {
             fetchResults: `/ui/fetch?jobId=${jobId}`,
             viewGallery: `/app/gallery?jobId=${jobId}`,
@@ -158,6 +181,8 @@ export default async function pollRoutes(fastify: FastifyInstance) {
       
       fastify.log.error({ 
         error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined,
+        jobId: request.query ? (request.query as any).jobId : undefined,
         duration,
       }, 'Job polling failed via API');
 

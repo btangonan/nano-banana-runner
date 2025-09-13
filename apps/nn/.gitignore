@@ -1,0 +1,6 @@
+# Service Account Keys - NEVER COMMIT
+nb-runner-key.json
+nb-runner-*-key.json
+*-key.json
+*.key.json
+service-account-*.json

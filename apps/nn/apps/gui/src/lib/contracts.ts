@@ -13,14 +13,16 @@ export type Problem = z.infer<typeof Problem>;
 
 // Image Descriptor (matches backend ImageDescriptorSchema)
 export const Descriptor = z.object({
+  provider: z.string().optional(), // 'sharp' or 'gemini'
   path: z.string(),
   hash: z.string(),
   width: z.number().positive(),
   height: z.number().positive(),
+  format: z.string().optional(), // 'png', 'jpeg', 'webp', etc.
   palette: z.array(z.string()).max(10),
   subjects: z.array(z.string()),
   style: z.array(z.string()),
-  lighting: z.array(z.string()),
+  lighting: z.union([z.string(), z.array(z.string())]), // Can be string or array
   camera: z.object({
     lens: z.string().optional(),
     f: z.number().positive().optional(),
@@ -70,6 +72,14 @@ export const AnalyzeResponse = z.object({
 export type AnalyzeRequest = z.infer<typeof AnalyzeRequest>;
 export type AnalyzeResponse = z.infer<typeof AnalyzeResponse>;
 
+// Clear session API schemas
+export const ClearResponse = z.object({
+  cleared: z.boolean(),
+  message: z.string().optional(),
+}).strict();
+
+export type ClearResponse = z.infer<typeof ClearResponse>;
+
 // Prompt Row (matches backend PromptRowSchema)
 export const PromptRow = z.object({
   prompt: z.string().min(1).max(2000),
@@ -97,7 +107,7 @@ export const RemixResponse = z.object({
   sourceImages: z.number().min(0),
   avgPerImage: z.number().min(0),
   duration: z.string(),
-  sample: z.array(PromptRow).max(5).optional(),
+  sample: z.array(PromptRow).optional(),
   outputPath: z.string(),
   promptsBySource: z.record(z.string(), z.number()),
 }).strict();
@@ -228,6 +238,14 @@ export const PollResponse = z.object({
     result: z.object({
       message: z.string(),
       outputLocation: z.string(),
+      dryRunStats: z.object({
+        promptCount: z.number(),
+        variants: z.number(),
+        estimatedImages: z.number(),
+        estimatedTime: z.string(),
+        estimatedCost: z.string(),
+        provider: z.string(),
+      }).optional(),
     }),
     actions: z.object({
       fetchResults: z.string(),
@@ -269,6 +287,7 @@ export type PollResponse = z.infer<typeof PollResponse>;
 export const FetchRequest = z.object({
   jobId: z.string().uuid(),
   format: z.enum(['json', 'gallery', 'download']).default('json'),
+  // Numbers in query params are handled on the server side
   limit: z.number().int().min(1).max(100).optional(),
   offset: z.number().int().min(0).optional(),
 }).strict();

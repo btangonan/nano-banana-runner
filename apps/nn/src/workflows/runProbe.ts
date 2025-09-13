@@ -94,7 +94,7 @@ export async function runProbe(): Promise<ProbeResult> {
       
       // Get the model we intend to use
       const model = vertex.preview.getGenerativeModel({
-        model: 'gemini-2.5-flash-image-preview',
+        model: 'gemini-1.5-flash',
         generationConfig: {
           maxOutputTokens: 10,  // Minimal to reduce cost
           temperature: 0.1,
@@ -159,7 +159,7 @@ export async function runProbe(): Promise<ProbeResult> {
       await manifest.recordSuccess('probe', 'vertex-ai', PROBE_CACHE_FILE, {
         project: result.project,
         location: result.location,
-        model: 'gemini-2.5-flash-image-preview'
+        model: 'gemini-1.5-flash'
       });
     } else {
       // Record failure in manifest

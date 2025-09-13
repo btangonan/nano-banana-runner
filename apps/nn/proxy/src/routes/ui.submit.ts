@@ -21,7 +21,8 @@ export default async function submitRoutes(fastify: FastifyInstance) {
     provider: z.enum(['batch', 'vertex']).optional(), // Per-job provider override
     refMode: z.enum(['style', 'prop', 'subject', 'pose', 'environment', 'mixed']).default('style'),
     variants: z.union([z.literal(1), z.literal(2), z.literal(3)]).default(1),
-    concurrency: z.number().int().min(1).max(10).default(2),
+    // Coerce to number in case it comes as string from forms
+    concurrency: z.coerce.number().int().min(1).max(10).default(2),
     outDir: z.string().default('./outputs'),
     runMode: z.enum(['dry-run', 'live']).default('dry-run'),
     compress: z.boolean().default(true),
@@ -332,6 +333,7 @@ async function executeWorkflow(
     }
     
     await runBatchSubmit({
+      jobId: jobId,  // Pass the UUID generated for this job
       provider: provider, // Pass provider override to workflow
       promptsPath: options.promptsPath,
       styleDir: options.styleDir,

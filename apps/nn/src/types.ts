@@ -1,15 +1,31 @@
 import { z } from 'zod';
 
-// Image Analysis Types
+// Image Analysis Types - Updated for PR-3 provider architecture
 export const ImageDescriptorSchema = z.object({
+  // Core fields
   path: z.string(),
   hash: z.string(),
-  width: z.number().positive(),
-  height: z.number().positive(),
-  palette: z.array(z.string()).max(10),
-  subjects: z.array(z.string()),
-  style: z.array(z.string()),
-  lighting: z.array(z.string()),
+  width: z.number().positive().optional(),
+  height: z.number().positive().optional(),
+  format: z.string().optional(),
+  palette: z.array(z.string()).max(10).optional(),
+  
+  // Provider identification (PR-3)
+  provider: z.enum(['sharp', 'gemini']).optional(),
+  
+  // AI-enhanced fields (additive, optional)
+  objects: z.array(z.string()).max(20).optional(),
+  scene: z.string().max(256).optional(),
+  style: z.array(z.string()).max(10).optional(),
+  composition: z.string().max(256).optional(),
+  colors: z.array(z.string()).max(10).optional(),
+  lighting: z.string().max(256).optional(),
+  qualityIssues: z.array(z.string()).optional(),
+  safetyTags: z.array(z.string()).optional(),
+  confidence: z.number().min(0).max(1).optional(),
+  
+  // Legacy fields (backward compatibility)
+  subjects: z.array(z.string()).optional(),
   camera: z.object({
     lens: z.string().optional(),
     f: z.number().positive().optional(),
@@ -159,6 +175,7 @@ export interface ImageGenProvider {
 // Asynchronous provider (new, for Gemini Batch)
 export interface AsyncImageGenProvider {
   submit(req: { 
+    jobId?: string;  // Optional job ID to use (if not provided, provider will generate one)
     rows: PromptRow[]; 
     variants: 1 | 2 | 3; 
     styleOnly: true; 

@@ -1,4 +1,8 @@
 import { request } from "undici";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { join } from "node:path";
+import { existsSync } from "node:fs";
 
 export type SubmitReq = {
   jobId?: string;                 // optional client-provided id
@@ -16,140 +20,258 @@ export type PollRes = {
   errors?: any[] 
 };
 export type FetchRes = { 
-  results: Array<{ id: string; prompt: string; outUrl?: string }>; 
+  results: Array<{ id: string; prompt: string; outUrl?: string; filepath?: string }>; 
   problems: any[] 
 };
+
+// In-memory storage for job status and results
+const jobs = new Map<string, {
+  status: PollRes["status"];
+  completed: number;
+  total: number;
+  results: Array<{ id: string; prompt: string; outUrl?: string; filepath?: string }>;
+  problems: any[];
+  errors?: any[];
+}>();
 
 export class GeminiBatchClient {
   constructor(private apiKey: string) {}
 
-  // NOTE: Using generativelanguage API for batch operations
+  // Submit individual image generation requests (no real batch API exists)
   async submit(req: SubmitReq): Promise<SubmitRes> {
-    // For Gemini Batch, we need to create a batch prediction job
-    // This is a simplified implementation - actual API may differ
-    const batchRequest = {
-      requests: req.rows.map((row, idx) => ({
-        model: "models/gemini-2.0-flash-exp",
-        contents: [
-          {
-            role: "system",
-            parts: [{ 
-              text: "You are an image generator. Generate images based on the prompt with style-only conditioning. Focus on artistic style, not copying content." 
-            }]
-          },
-          {
-            role: "user",
-            parts: [
-              { text: row.prompt },
-              ...req.styleRefs.map(ref => ({ 
-                inlineData: { 
-                  mimeType: "image/png", 
-                  data: ref  // In real implementation, this would be base64 encoded image data
-                }
-              }))
-            ]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.8,
-          maxOutputTokens: 4096,
-          candidateCount: req.variants
-        }
-      }))
-    };
-
-    const r = await request("https://generativelanguage.googleapis.com/v1beta/batchPredictions", {
-      method: "POST",
-      headers: { 
-        "content-type": "application/json", 
-        "x-goog-api-key": this.apiKey 
-      },
-      body: JSON.stringify(batchRequest)
+    // Use provided jobId if available, otherwise generate one
+    const jobId = req.jobId ?? "job-" + Date.now();
+    const totalImages = req.rows.length * req.variants;
+    
+    // Initialize job tracking
+    jobs.set(jobId, {
+      status: "pending",
+      completed: 0,
+      total: totalImages,
+      results: [],
+      problems: [],
+      errors: []
     });
-    
-    if (r.statusCode >= 400) {
-      const body = await r.body.text();
-      throw new Error(`submit failed ${r.statusCode}: ${body}`);
-    }
-    
-    const body = await r.body.json() as any;
+
+    // Process images asynchronously (don't await)
+    this.processImagesAsync(jobId, req).catch(error => {
+      const job = jobs.get(jobId);
+      if (job) {
+        job.status = "failed";
+        job.errors = [{ message: error.message }];
+      }
+    });
+
     return { 
-      jobId: body.name ?? body.jobId ?? "job-" + Date.now(), 
-      estCount: req.rows.length * req.variants 
+      jobId, 
+      estCount: totalImages 
     };
   }
 
   async poll(jobId: string): Promise<PollRes> {
-    const r = await request(`https://generativelanguage.googleapis.com/v1beta/${encodeURIComponent(jobId)}`, {
-      method: "GET",
-      headers: { "x-goog-api-key": this.apiKey }
-    });
-    
-    if (r.statusCode >= 400) {
-      const body = await r.body.text();
-      throw new Error(`poll failed ${r.statusCode}: ${body}`);
+    const job = jobs.get(jobId);
+    if (!job) {
+      throw new Error(`poll failed 404: Job not found: ${jobId}`);
     }
     
-    const body = await r.body.json() as any;
-    
-    // Map provider states to our standard states
-    let status: PollRes["status"] = "pending";
-    if (body.state === "PROCESSING" || body.state === "RUNNING") status = "running";
-    else if (body.state === "SUCCEEDED" || body.state === "DONE") status = "succeeded";
-    else if (body.state === "FAILED" || body.state === "CANCELLED") status = "failed";
-    
     return { 
-      status, 
-      completed: body.completedCount ?? 0, 
-      total: body.totalCount ?? 0, 
-      errors: body.errors ?? [] 
+      status: job.status, 
+      completed: job.completed, 
+      total: job.total, 
+      errors: job.errors ?? [] 
     };
   }
 
   async fetch(jobId: string): Promise<FetchRes> {
-    const r = await request(`https://generativelanguage.googleapis.com/v1beta/${encodeURIComponent(jobId)}:get`, {
-      method: "GET",
-      headers: { "x-goog-api-key": this.apiKey }
+    const job = jobs.get(jobId);
+    if (!job) {
+      throw new Error(`fetch failed 404: Job not found: ${jobId}`);
+    }
+    
+    return { 
+      results: job.results, 
+      problems: job.problems 
+    };
+  }
+
+  async cancel(jobId: string): Promise<{ status: "canceled" | "not_found" }> {
+    const job = jobs.get(jobId);
+    if (!job) {
+      return { status: "not_found" };
+    }
+    
+    job.status = "failed"; // Mark as failed to stop processing
+    return { status: "canceled" };
+  }
+
+  // Process images individually using the real Gemini API
+  private async processImagesAsync(jobId: string, req: SubmitReq): Promise<void> {
+    const job = jobs.get(jobId);
+    if (!job) return;
+
+    job.status = "running";
+    
+    // Create output directory for this job
+    const outputDir = join("./outputs", jobId);
+    await mkdir(outputDir, { recursive: true });
+    console.log(`Created output directory: ${outputDir}`);
+
+    try {
+      // Load and encode reference images to base64
+      const styleRefsBase64: Array<{ mimeType: string; data: string }> = [];
+      for (const refPath of req.styleRefs) {
+        try {
+          const imageBuffer = await readFile(refPath);
+          const base64Data = imageBuffer.toString('base64');
+          const mimeType = this.getMimeType(refPath);
+          styleRefsBase64.push({ mimeType, data: base64Data });
+        } catch (error) {
+          console.warn(`Failed to load reference image: ${refPath}`, error);
+        }
+      }
+
+      // Process each prompt with variants
+      for (let i = 0; i < req.rows.length; i++) {
+        const row = req.rows[i];
+        
+        for (let v = 0; v < req.variants; v++) {
+          if (job.status === "failed") break; // Check for cancellation
+          
+          try {
+            const result = await this.generateSingleImage(row, styleRefsBase64);
+            const resultId = `${i}-${v}`;
+            
+            // Save the generated image to disk
+            if (result.outUrl && result.outUrl.startsWith('data:')) {
+              const filename = `image_${i}_variant_${v}.png`;
+              const filepath = join(outputDir, filename);
+              
+              // Extract base64 data from data URL
+              const base64Data = result.outUrl.split(',')[1];
+              if (base64Data) {
+                await writeFile(filepath, Buffer.from(base64Data, 'base64'));
+                console.log(`Saved image to: ${filepath}`);
+                
+                // Update result to include file path (keeping data URL for backward compat)
+                job.results.push({
+                  id: resultId,
+                  prompt: row.prompt,
+                  outUrl: result.outUrl,
+                  filepath: filepath
+                });
+              } else {
+                job.results.push({
+                  id: resultId,
+                  prompt: row.prompt,
+                  outUrl: result.outUrl
+                });
+              }
+            } else {
+              job.results.push({
+                id: resultId,
+                prompt: row.prompt,
+                outUrl: result.outUrl
+              });
+            }
+            job.completed++;
+            
+          } catch (error) {
+            console.error(`Failed to generate image_${i}_variant_${v}:`, error);
+            job.problems.push({
+              type: "about:blank",
+              title: `Image generation failed for image_${i}_variant_${v}`,
+              detail: error instanceof Error ? error.message : "Unknown error",
+              status: 500,
+              instance: `image_${i}_variant_${v}`
+            });
+            job.completed++; // Still count as processed
+          }
+        }
+      }
+      
+      if (job.status === "running") {
+        job.status = "succeeded";
+      }
+      
+    } catch (error) {
+      job.status = "failed";
+      job.errors = [{ message: error instanceof Error ? error.message : "Unknown error" }];
+    }
+  }
+
+  // Generate a single image using Gemini 2.5 Flash image generation model
+  private async generateSingleImage(
+    row: { prompt: string; sourceImage?: string; seed?: number; tags?: string[] },
+    styleRefs: Array<{ mimeType: string; data: string }>
+  ): Promise<{ outUrl?: string }> {
+    // Create full prompt with style conditioning
+    let fullPrompt = `Use reference images strictly for style, palette, texture, and mood. Do NOT copy subject geometry, pose, or layout.\n\n${row.prompt}`;
+    
+    // Build parts array for Gemini API
+    const parts: any[] = [
+      { text: fullPrompt }
+    ];
+    
+    // Add reference images as inline data if available
+    if (styleRefs.length > 0) {
+      for (const ref of styleRefs) {
+        parts.push({
+          inline_data: {
+            mime_type: ref.mimeType,
+            data: ref.data
+          }
+        });
+      }
+      parts.push({ text: "\n\nApply the artistic style and mood from the reference images above to the generated image." });
+    }
+
+    const requestBody = {
+      contents: [{
+        parts: parts
+      }]
+    };
+
+    const r = await request("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent", {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json", 
+        "x-goog-api-key": this.apiKey
+      },
+      body: JSON.stringify(requestBody)
     });
     
     if (r.statusCode >= 400) {
       const body = await r.body.text();
-      throw new Error(`fetch failed ${r.statusCode}: ${body}`);
+      throw new Error(`generate failed ${r.statusCode}: ${body}`);
     }
     
     const body = await r.body.json() as any;
     
-    // Extract results from batch response
-    const results = (body.responses ?? []).map((resp: any, idx: number) => ({
-      id: `result-${idx}`,
-      prompt: resp.request?.contents?.[1]?.parts?.[0]?.text ?? "",
-      outUrl: resp.response?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data 
-        ? `data:image/png;base64,${resp.response.candidates[0].content.parts[0].inlineData.data}`
-        : undefined
-    }));
+    // Extract base64 image data from Gemini response
+    const candidate = body.candidates?.[0];
+    const imagePart = candidate?.content?.parts?.find((part: any) => part.inlineData);
     
-    const problems = (body.errors ?? []).map((err: any) => ({
-      type: "about:blank",
-      title: "Batch generation error",
-      detail: err.message ?? "Unknown error",
-      status: 500
-    }));
-    
-    return { results, problems };
-  }
-
-  async cancel(jobId: string): Promise<{ status: "canceled" | "not_found" }> {
-    const r = await request(`https://generativelanguage.googleapis.com/v1beta/${encodeURIComponent(jobId)}:cancel`, {
-      method: "POST",
-      headers: { "x-goog-api-key": this.apiKey }
-    });
-    
-    if (r.statusCode === 404) return { status: "not_found" };
-    if (r.statusCode >= 400) {
-      const body = await r.body.text();
-      throw new Error(`cancel failed ${r.statusCode}: ${body}`);
+    if (imagePart?.inlineData?.data) {
+      return {
+        outUrl: `data:image/png;base64,${imagePart.inlineData.data}`
+      };
     }
     
-    return { status: "canceled" };
+    throw new Error("No image data in response");
+  }
+
+  private getMimeType(filePath: string): string {
+    const ext = filePath.toLowerCase().split('.').pop();
+    switch (ext) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      default:
+        return 'image/png';
+    }
   }
 }

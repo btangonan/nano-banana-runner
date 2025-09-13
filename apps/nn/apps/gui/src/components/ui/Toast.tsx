@@ -1,7 +1,35 @@
 import { useState, useEffect } from "react"
-import { X, AlertCircle, CheckCircle, Info, AlertTriangle } from "lucide-react"
+import { 
+  X, 
+  AlertCircle, 
+  CircleCheck,    // ✅ use CircleCheck (not CheckCircle)
+  Info, 
+  TriangleAlert   // ✅ use TriangleAlert (not AlertTriangle)
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "./Button"
+
+// Icon mapping for variants
+const ICONS = {
+  default: Info,
+  destructive: AlertCircle,
+  success: CircleCheck,
+  warning: TriangleAlert,
+  close: X,
+} as const
+
+// SafeIcon wrapper to prevent crashes if any import is undefined
+function SafeIcon(Comp?: React.ComponentType<any>, Fallback = Info) {
+  const C = Comp ?? Fallback
+  return (props: any) => <C {...props} />
+}
+
+// Dev-time warning for missing icon imports
+if (import.meta.env.DEV) {
+  const missing = Object.entries({ X, AlertCircle, CircleCheck, Info, TriangleAlert })
+    .filter(([,v]) => !v).map(([k]) => k)
+  if (missing.length) console.warn('[Toast] Missing lucide icons:', missing)
+}
 
 export interface ToastProps {
   id: string
@@ -11,7 +39,7 @@ export interface ToastProps {
   duration?: number
 }
 
-const Toast = ({ 
+export const Toast = ({ 
   id, 
   title, 
   description, 
@@ -30,14 +58,8 @@ const Toast = ({
     return () => clearTimeout(timer)
   }, [id, duration, onClose])
 
-  const icons = {
-    default: Info,
-    destructive: AlertCircle,
-    success: CheckCircle,
-    warning: AlertTriangle,
-  }
-
-  const Icon = icons[variant]
+  const VariantIcon = SafeIcon(ICONS[variant], Info)
+  const CloseIcon = SafeIcon(ICONS.close, Info)
 
   return (
     <div
@@ -52,7 +74,7 @@ const Toast = ({
         }
       )}
     >
-      <Icon className="h-4 w-4" />
+      <VariantIcon className="h-4 w-4" />
       <div className="grid gap-1">
         <div className="text-sm font-semibold">{title}</div>
         {description && (
@@ -68,30 +90,10 @@ const Toast = ({
           setTimeout(() => onClose(id), 300)
         }}
       >
-        <X className="h-4 w-4" />
+        <CloseIcon className="h-4 w-4" />
       </Button>
     </div>
   )
-}
-
-// Toast container and hook for managing toasts
-export const useToast = () => {
-  const [toasts, setToasts] = useState<ToastProps[]>([])
-
-  const toast = (props: Omit<ToastProps, 'id'>) => {
-    const id = crypto.randomUUID()
-    setToasts(prev => [...prev, { ...props, id }])
-  }
-
-  const dismiss = (id: string) => {
-    setToasts(prev => prev.filter(toast => toast.id !== id))
-  }
-
-  return {
-    toasts,
-    toast,
-    dismiss,
-  }
 }
 
 // Toast container component

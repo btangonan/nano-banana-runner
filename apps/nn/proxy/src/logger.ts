@@ -8,7 +8,7 @@ export const log = pino({
       "*.apiKey", 
       "*.Authorization", 
       "*.token",
-      "*.GEMINI_BATCH_API_KEY"
+      "*.GEMINI_API_KEY"
     ], 
     censor: "[REDACTED]" 
   },

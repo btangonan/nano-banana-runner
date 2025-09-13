@@ -8,8 +8,37 @@ import { env } from '../config/env.js';
 import { loadReferencePack, getPackDigest, getTotalRefCount, getActiveModes } from '../config/refs.js';
 import { RefMode, ReferencePack } from '../types/refs.js';
 import { preflight, loadBudgetsFromEnv } from './preflight.js';
+import * as crypto from 'node:crypto';
+
+/**
+ * Compute deterministic hash for prompts array
+ * This is a safe, additive function that doesn't modify existing behavior
+ * @param prompts - Array of prompt rows to hash
+ * @returns SHA256 hash of normalized prompts
+ */
+function computePromptsHash(prompts: PromptRow[]): string {
+  // Normalize and sort prompts for consistent hashing
+  const normalized = prompts
+    .map(p => {
+      // Include all relevant fields that affect generation
+      const parts = [
+        p.prompt,
+        p.sourceImage || '',
+        p.seed?.toString() || '',
+        p.strength?.toString() || '',
+        ...(p.tags || [])
+      ];
+      return parts.join(':');
+    })
+    .sort() // Sort for deterministic ordering
+    .join('|');
+  
+  // Generate SHA256 hash
+  return crypto.createHash('sha256').update(normalized).digest('hex');
+}
 
 interface BatchSubmitOptions {
+  jobId?: string;                  // Optional job ID to use throughout the workflow
   provider?: ProviderName;        // per-job override (optional)
   promptsPath: string;
   styleDir?: string;
@@ -165,10 +194,11 @@ export async function runBatchSubmit(opts: BatchSubmitOptions): Promise<void> {
     }
     
     // Create provider with override support
-    const provider = createProvider(opts.provider);
+    const provider = await createProvider(opts.provider);
     
     // Submit job using provider factory
     const result = await provider.generate({
+      jobId: opts.jobId,  // Pass the optional jobId to the provider
       rows,
       variants: opts.variants,
       styleOnly: true,
@@ -211,7 +241,17 @@ export async function runBatchSubmit(opts: BatchSubmitOptions): Promise<void> {
       provider: providerName as any,
       submittedAt: new Date().toISOString(),
       estCount,
-      promptsHash: crypto.randomUUID(), // TODO: compute actual hash
+      promptsHash: (() => {
+        if (env.USE_COMPUTED_HASH) {
+          const hash = computePromptsHash(rows);
+          log.debug({ hash, prompts: rows.length }, 'Using computed hash');
+          return hash;
+        } else {
+          const uuid = crypto.randomUUID();
+          log.debug({ uuid }, 'Using random UUID (legacy behavior)');
+          return uuid;
+        }
+      })(),
       styleRefsHash: packDigest,
       statusHistory: [{
         timestamp: new Date().toISOString(),
