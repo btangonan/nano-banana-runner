@@ -10,7 +10,7 @@ import type {
 import { env } from '../config/env.js';
 import { createOperationLogger, logError } from '../logger.js';
 // Remove unused import
-import { STYLE_ONLY_PREFIX } from '../core/remix.js';
+import { STYLE_ONLY_PREFIX } from '../core/remix/index.js';
 import { 
   extractFirstImageBase64, 
   toPngBufferFromB64, 

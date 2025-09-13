@@ -5,7 +5,7 @@ import { BatchRelayClient } from './batchRelayClient.js';
 import { createOperationLogger } from '../logger.js';
 import { env } from '../config/env.js';
 import { passesStyleGuard } from '../core/styleGuard.js';
-import { STYLE_ONLY_PREFIX } from '../core/remix.js';
+import { STYLE_ONLY_PREFIX } from '../core/remix/index.js';
 
 /**
  * Gemini Batch provider using relay proxy for secure API key handling

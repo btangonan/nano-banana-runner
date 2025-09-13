@@ -62,11 +62,16 @@ async function testUltraCinematic() {
         
         if (ultraResponse.ok) {
             const data = await ultraResponse.json();
-            console.log(`Title: ${data.descriptor?.title || 'N/A'}`);
-            console.log(`Narrative: ${data.descriptor?.narrative || 'N/A'}`);
+            console.log(`Has Title: ${!!data.descriptor?.title}`);
+            console.log(`Has Purpose: ${!!data.descriptor?.purpose}`);
+            console.log(`Has Production: ${!!data.descriptor?.production}`);
+            console.log(`Has Director Notes: ${!!data.descriptor?.director_notes}`);
+            console.log(`Has PostProduction: ${!!data.descriptor?.postProduction}`);
+            console.log(`Narrative Story: ${data.descriptor?.narrative?.story?.substring(0, 80) || 'N/A'}...`);
+            console.log(`Narrative Emotion: ${data.descriptor?.narrative?.emotion || 'N/A'}`);
             console.log(`Camera Model: ${data.descriptor?.camera?.model || 'N/A'}`);
-            console.log(`Director Notes: ${data.descriptor?.director_notes || 'N/A'}`);
             console.log(`Film Reference: ${data.descriptor?.references?.[0] || 'N/A'}`);
+            console.log(`VideoHints Keys: ${Object.keys(data.descriptor?.videoHints || {}).join(', ')}`);
         } else {
             const errorText = await ultraResponse.text();
             console.log('❌ Ultra mode failed:', errorText);
