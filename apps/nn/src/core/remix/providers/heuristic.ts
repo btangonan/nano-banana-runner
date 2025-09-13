@@ -2,6 +2,8 @@ import type { RemixProvider, RemixContext, RemixResult } from './types.js';
 import type { ImageDescriptor, PromptRow } from '../../../types.js';
 import { createOperationLogger, logTiming } from '../../../logger.js';
 import { generateIdempotencyKey } from '../../idempotency.js';
+import { extractComponents, simplifyDescription } from '../semantic/extractor.js';
+import { generateFromTemplate } from '../semantic/templates.js';
 
 /**
  * Style-only instruction - MUST be preserved verbatim
@@ -127,50 +129,6 @@ export class HeuristicRemixProvider implements RemixProvider {
     return result.slice(0, maxCount);
   }
 
-  /**
-   * Compose final prompt from components
-   */
-  private composePrompt(
-    subjects: string[],
-    styleAdj: string[],
-    lighting: string[],
-    camera?: { lens?: string; f?: number },
-    composition?: string
-  ): string {
-    const parts: string[] = [];
-    
-    // Subject (required)
-    if (subjects.length > 0) {
-      parts.push(subjects.join(', '));
-    } else {
-      parts.push('subject');
-    }
-    
-    // Style adjectives (≤3)
-    if (styleAdj.length > 0) {
-      parts.push(`${styleAdj.slice(0, 3).join(', ')} style`);
-    }
-    
-    // Lighting (≤2) 
-    if (lighting.length > 0) {
-      parts.push(`lighting: ${lighting.slice(0, 2).join(', ')}`);
-    }
-    
-    // Camera (optional)
-    if (camera?.lens) {
-      parts.push(`lens: ${camera.lens}`);
-    }
-    if (camera?.f) {
-      parts.push(`f/${camera.f}`);
-    }
-    
-    // Composition (optional)
-    if (composition) {
-      parts.push(`composition: ${composition}`);
-    }
-    
-    return parts.join('; ');
-  }
 
   /**
    * Inject style-only prefix into prompt
@@ -188,17 +146,22 @@ export class HeuristicRemixProvider implements RemixProvider {
     rng: SeededRNG
   ): PromptRow[] {
     const prompts: PromptRow[] = [];
+    const usedPrompts = new Set<string>();
     
-    // Handle both ultra-cinematic (singular subject) and standard (plural subjects) formats
-    // Note: ultra-cinematic format uses 'subject' field which doesn't exist in type, so we access via any
-    const subjects = descriptor.subjects || ((descriptor as any).subject ? [(descriptor as any).subject] : []);
+    // Get the subject description (ultra-cinematic or standard format)
+    const subjectText = (descriptor as any).subject || 
+                       (descriptor.subjects && descriptor.subjects.join(', ')) || 
+                       'abstract subject';
+    
+    // NEW: Extract semantic components instead of using subjects verbatim
+    const simplified = simplifyDescription(subjectText);
+    const components = extractComponents(simplified);
     
     // Handle lighting as either array (standard) or object (ultra-cinematic)
     let lightingArray: string[] = [];
     if (Array.isArray(descriptor.lighting)) {
       lightingArray = descriptor.lighting;
     } else if (typeof descriptor.lighting === 'object' && descriptor.lighting !== null) {
-      // Extract lighting terms from ultra-cinematic object
       const lightingObj = descriptor.lighting as any;
       if (lightingObj.quality) lightingArray.push(lightingObj.quality);
       if (lightingObj.timeOfDay) lightingArray.push(lightingObj.timeOfDay);
@@ -211,14 +174,18 @@ export class HeuristicRemixProvider implements RemixProvider {
     const styleArray = Array.isArray(descriptor.style) ? descriptor.style : [];
     
     for (let i = 0; i < options.maxPerImage; i++) {
-      // Generate variations
+      // NEW: Generate semantically varied subject using templates
+      const variedSubject = generateFromTemplate(components, rng, usedPrompts);
+      usedPrompts.add(variedSubject);
+      
+      // Generate style and lighting variations
       const styleAdj = this.varyStyleAdjectives(styleArray, rng, options.maxStyleAdj);
       const lighting = this.varyLighting(lightingArray, rng, options.maxLighting);
       const composition = rng.choice(COMPOSITION_DIRECTIVES);
       
-      // Compose prompt
-      const basePrompt = this.composePrompt(
-        subjects,
+      // Compose prompt with varied subject
+      const basePrompt = this.composeVariedPrompt(
+        variedSubject,
         styleAdj,
         lighting,
         descriptor.camera,
@@ -228,9 +195,11 @@ export class HeuristicRemixProvider implements RemixProvider {
       // Add style-only prefix
       const finalPrompt = this.injectStyleOnlyPrefix(basePrompt);
       
-      // Create tags with provenance
+      // Create tags with semantic components
       const tags = [
-        ...subjects.map(s => `subject:${s}`),
+        ...components.entities.map(e => `entity:${e}`),
+        ...components.actions.map(a => `action:${a}`),
+        ...components.settings.map(s => `setting:${s}`),
         ...styleAdj.map(s => `style:${s}`),
         ...lighting.map(l => `lighting:${l.replace(' ', '-')}`),
         `composition:${composition.replace(' ', '-')}`,
@@ -246,6 +215,47 @@ export class HeuristicRemixProvider implements RemixProvider {
     }
     
     return prompts;
+  }
+
+  /**
+   * Compose a prompt with the varied subject
+   */
+  private composeVariedPrompt(
+    variedSubject: string,
+    styleAdj: string[],
+    lighting: string[],
+    camera?: { lens?: string; f?: number },
+    composition?: string
+  ): string {
+    const parts: string[] = [];
+    
+    // Start with the varied subject (already contains entities, actions, settings)
+    parts.push(variedSubject);
+    
+    // Add style adjectives if not already in subject
+    if (styleAdj.length > 0 && !variedSubject.includes('style')) {
+      parts.push(`${styleAdj.slice(0, 3).join(', ')} style`);
+    }
+    
+    // Add lighting if not already in subject
+    if (lighting.length > 0 && !variedSubject.includes('light')) {
+      parts.push(`lighting: ${lighting.slice(0, 2).join(', ')}`);
+    }
+    
+    // Camera (optional)
+    if (camera?.lens) {
+      parts.push(`lens: ${camera.lens}`);
+    }
+    if (camera?.f) {
+      parts.push(`f/${camera.f}`);
+    }
+    
+    // Composition (optional) if not already in subject
+    if (composition && !variedSubject.includes(composition)) {
+      parts.push(`composition: ${composition}`);
+    }
+    
+    return parts.join('; ');
   }
 
   async generatePrompts(context: RemixContext): Promise<RemixResult> {
